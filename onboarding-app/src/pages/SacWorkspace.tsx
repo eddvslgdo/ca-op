@@ -1,0 +1,561 @@
+import { useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { LinkGeneratorModal } from "@/components/sac/LinkGeneratorModal"
+import { ShieldCheck, User, Link2, Copy, Check, History, Send, ArrowUpRight, Database, X, AlertTriangle, Building2, MapPin, CreditCard, FileText, ExternalLink, Truck, XCircle, Eye, RefreshCw } from "lucide-react"
+import type { MagicLinkSession } from "@/types/onboarding"
+
+interface SacWorkspaceProps {
+  sessions: MagicLinkSession[]
+  onSessionCreated: (session: MagicLinkSession) => void
+  onPromoteToOnboarding: (sessionId: string) => void
+  onSyncSessionToCRM: (sessionId: string) => void
+  onApproveSession: (sessionId: string) => void
+  onReactivateSession: (sessionId: string) => void 
+  onRequestCorrections?: (sessionId: string, sections: string[], message: string) => void 
+}
+
+type AlertActionType = "sync" | "promote" | "approve" | "correct" | null
+
+export function SacWorkspace({
+  sessions,
+  onSessionCreated,
+  onPromoteToOnboarding,
+  onSyncSessionToCRM,
+  onApproveSession,
+  onReactivateSession,
+  onRequestCorrections = () => console.log("Correcciones solicitadas")
+}: SacWorkspaceProps) {
+  const [activeTab, setActiveTab] = useState<"sessions" | "audit">("sessions")
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  
+  const [selectedSession, setSelectedSession] = useState<MagicLinkSession | null>(null)
+  const [copiedLink, setCopiedLink] = useState(false)
+
+  const [activeAlert, setActiveAlert] = useState<{ type: AlertActionType; sessionId: string } | null>(null)
+  const [isFullDetailsOpen, setIsFullDetailsOpen] = useState(false)
+
+  const [correctionSections, setCorrectionSections] = useState<string[]>([])
+  const [correctionMessage, setCorrectionMessage] = useState("")
+
+  const currentSession = selectedSession ? sessions.find(s => s.sessionId === selectedSession.sessionId) || null : null
+
+  const handleCopy = (token: string) => {
+    navigator.clipboard.writeText(`https://onboarding.grupopolak.com/registro/magic-link?token=${token}`)
+    setCopiedLink(true)
+    setTimeout(() => setCopiedLink(false), 2000)
+  }
+
+  const handleSafeSyncToCRM = (sessionId: string) => setActiveAlert({ type: "sync", sessionId })
+  const handleSafePromoteToOnboarding = (sessionId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    setActiveAlert({ type: "promote", sessionId })
+  }
+  const handleSafeApproveSession = (sessionId: string) => setActiveAlert({ type: "approve", sessionId })
+  
+  const handleSafeRequestCorrections = (sessionId: string) => {
+    setCorrectionSections([])
+    setCorrectionMessage("")
+    setActiveAlert({ type: "correct", sessionId })
+  }
+
+  const toggleCorrectionSection = (sectionId: string) => {
+    setCorrectionSections(prev => 
+      prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]
+    )
+  }
+
+  const confirmAlertAction = () => {
+    if (!activeAlert) return
+    switch (activeAlert.type) {
+      case "sync": onSyncSessionToCRM(activeAlert.sessionId); break
+      case "promote": onPromoteToOnboarding(activeAlert.sessionId); break
+      case "approve": onApproveSession(activeAlert.sessionId); break
+      case "correct": onRequestCorrections(activeAlert.sessionId, correctionSections, correctionMessage); break
+    }
+    setActiveAlert(null)
+  }
+
+  const CORRECTION_OPTIONS = [
+    { id: "empresa", label: "Datos de Empresa", icon: Building2 },
+    { id: "domicilio", label: "Domicilio Fiscal", icon: MapPin },
+    { id: "entregas", label: "Destinatarios", icon: Truck },
+    { id: "facturacion", label: "Datos Bancarios", icon: CreditCard },
+    { id: "documentos", label: "Documentos Adjuntos", icon: FileText },
+  ]
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col relative overflow-hidden">
+      <header className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 z-10">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-lg">P</div>
+          <div>
+            <h1 className="text-base font-bold tracking-tight">SAC Control Portal</h1>
+            <p className="text-xs text-slate-400">Orquestador de Sesiones B2B</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 text-xs">
+          <Button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 text-xs">
+            <Link2 className="h-4 w-4" /> Crear Nueva Sesión
+          </Button>
+          <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-md border border-slate-700">
+            <User className="h-3.5 w-3.5 text-indigo-400" />
+            <span className="font-medium text-slate-200">SAC: Eduardo Velázquez</span>
+          </div>
+        </div>
+      </header>
+
+      <div className="bg-white border-b border-slate-200 px-6 pt-3 flex gap-6 text-xs font-semibold z-10">
+        <button onClick={() => setActiveTab("sessions")} className={`pb-3 border-b-2 flex items-center gap-2 transition-colors ${activeTab === "sessions" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+          <ShieldCheck className="h-4 w-4" /> Gestión de Sesiones ({sessions.length})
+        </button>
+        <button onClick={() => setActiveTab("audit")} className={`pb-3 border-b-2 flex items-center gap-2 transition-colors ${activeTab === "audit" ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+          <History className="h-4 w-4" /> Bitácora de Auditoría
+        </button>
+      </div>
+
+      <main className="flex-1 p-6 max-w-7xl w-full mx-auto relative z-0">
+        {activeTab === "sessions" && (
+          <Card className="border-slate-200 shadow-sm bg-white overflow-hidden">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="text-xs font-semibold">ID Sesión / Empresa</TableHead>
+                  <TableHead className="text-xs font-semibold">Unidad de Negocio</TableHead>
+                  <TableHead className="text-xs font-semibold">Workflow & Estado CRM</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Acciones Directas</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sessions.map((sess) => (
+                  <TableRow 
+                    key={sess.sessionId} 
+                    className="cursor-pointer hover:bg-slate-50 transition-colors"
+                    onClick={() => setSelectedSession(sess)} 
+                  >
+                    <TableCell>
+                      <p className="text-xs font-mono text-indigo-600 font-medium">{sess.sessionId}</p>
+                      <p className="text-xs font-semibold text-slate-900">{sess.ultimoAvance.empresa.razonSocial || "Sin Nombre"}</p>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="bg-slate-50 text-slate-600">{sess.configComercial.unidadNegocio}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {/* AQUÍ ESTÁ EL INDICADOR DOBLE: Workflow + Estatus CRM */}
+                      <div className="flex flex-col gap-1.5 items-start">
+                        {sess.workflow === "lead" ? (
+                          <Badge variant="secondary" className="text-[10px] bg-slate-100 text-slate-600 hover:bg-slate-200">Prospecto (Lead)</Badge>
+                        ) : (
+                          <Badge className="text-[10px] bg-indigo-100 text-indigo-800 border-indigo-200 hover:bg-indigo-200">Onboarding Completo</Badge>
+                        )}
+                        
+                        {sess.crmProspectId ? (
+                          <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1">
+                            <Database className="h-2.5 w-2.5" /> {sess.crmProspectId}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1">
+                            <Database className="h-2.5 w-2.5" /> Pendiente CRM
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right space-x-2 flex justify-end items-center h-full">
+                      <Button 
+                        onClick={(e) => { e.stopPropagation(); onReactivateSession(sess.sessionId); }} 
+                        size="sm" 
+                        variant="outline"
+                        className={`text-[10px] gap-1 h-7 border-indigo-200 text-indigo-600 hover:bg-indigo-50 ${sess.status === "expired" ? "border-red-300 text-red-600 hover:bg-red-50" : ""}`}
+                      >
+                        <RefreshCw className="h-3 w-3" /> {sess.status === "expired" ? "Reactivar Vencido" : "+3 Días"}
+                      </Button>
+
+                      {sess.workflow === "lead" && sess.status === "active" && (
+                        <Button 
+                          onClick={(e) => handleSafePromoteToOnboarding(sess.sessionId, e)} 
+                          size="sm" 
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] gap-1 h-7"
+                        >
+                          <ArrowUpRight className="h-3 w-3" /> Promover a Onboarding
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        )}
+
+        {activeTab === "audit" && (
+          <Card className="border-slate-200 shadow-sm bg-white overflow-hidden">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="text-xs font-semibold">Fecha y Hora</TableHead>
+                  <TableHead className="text-xs font-semibold">Usuario</TableHead>
+                  <TableHead className="text-xs font-semibold">Acción Registrada</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Resultado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sessions.flatMap(s => s.auditLogs).map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="text-xs font-mono text-slate-600">{log.fechaHora}</TableCell>
+                    <TableCell className="text-xs font-semibold text-slate-800">{log.usuario}</TableCell>
+                    <TableCell className="text-xs text-slate-700">{log.accion}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">{log.resultado}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        )}
+      </main>
+
+      {/* ============================================================== */}
+      {/* PANEL SLIDE-OVER (INSPECTOR DE SESIÓN) */}
+      {/* ============================================================== */}
+      {currentSession && (
+        <>
+          <div 
+            className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40 transition-opacity"
+            onClick={() => setSelectedSession(null)}
+          />
+          
+          <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl border-l border-slate-200 flex flex-col animate-in slide-in-from-right duration-300">
+            
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <div>
+                <span className="text-[10px] font-mono text-indigo-600 font-bold tracking-wider">{currentSession.sessionId}</span>
+                <h3 className="text-sm font-bold text-slate-900 truncate pr-4">{currentSession.ultimoAvance.empresa.razonSocial || "Empresa en Captura"}</h3>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setSelectedSession(null)} className="h-7 w-7 text-slate-400 hover:bg-slate-200 rounded-full shrink-0">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs">
+              
+              <div className="space-y-3">
+                <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-1">
+                  <Link2 className="h-4 w-4 text-indigo-500" /> Enlace del Cliente (Magic Link)
+                </h4>
+                <div className="flex gap-2">
+                  <Input value={`https://onboarding.grupopolak.com/registro/magic-link?token=${currentSession.token}`} readOnly className="bg-slate-50 font-mono text-[10px] text-slate-600 h-8" />
+                  <Button onClick={() => handleCopy(currentSession.token)} size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white h-8 px-2.5 shrink-0">
+                    {copiedLink ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  </Button>
+                </div>
+                <div className="flex items-center justify-between bg-slate-50 border border-slate-100 p-2 rounded">
+                  <p className="text-[10px] text-slate-500 flex items-center gap-1">
+                    Expira: <strong className={`font-semibold ${currentSession.status === "expired" ? "text-red-600" : "text-slate-800"}`}>{currentSession.fechaExpiracion}</strong>
+                  </p>
+                  <Button 
+                    onClick={() => onReactivateSession(currentSession.sessionId)} 
+                    size="sm" 
+                    variant={currentSession.status === "expired" ? "default" : "outline"} 
+                    className={`h-6 text-[10px] gap-1 ${currentSession.status === "expired" ? "bg-indigo-600 hover:bg-indigo-700 text-white" : "text-indigo-600 border-indigo-200 hover:bg-indigo-50"}`}
+                  >
+                    <RefreshCw className="h-3 w-3" /> 
+                    {currentSession.status === "expired" ? "Reactivar Enlace" : "Extender (+3 Días)"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-1">
+                  <Database className="h-4 w-4 text-indigo-500" /> Estado Comercial CRM (RN-070)
+                </h4>
+                {currentSession.crmProspectId ? (
+                  <div className="bg-emerald-50/50 p-3 rounded-lg border border-emerald-100 space-y-1">
+                    <p className="text-emerald-700 font-semibold flex items-center gap-1.5">
+                      <Check className="h-4 w-4" /> Sincronizado
+                    </p>
+                    <p className="font-mono text-emerald-900">{currentSession.crmProspectId}</p>
+                  </div>
+                ) : (
+                  <div className="bg-amber-50/50 p-3 rounded-lg border border-amber-100 space-y-3">
+                    <p className="text-amber-700 font-medium leading-relaxed">
+                      Este prospecto aún no cuenta con un identificador comercial en SAP/CRM.
+                    </p>
+                    {currentSession.workflow === "lead" && (
+                      <Button 
+                        onClick={() => handleSafeSyncToCRM(currentSession.sessionId)} 
+                        variant="outline" size="sm" className="w-full h-8 text-xs gap-1.5 bg-white hover:bg-amber-50 hover:text-amber-800 border-amber-200 font-semibold"
+                      >
+                        <Database className="h-3.5 w-3.5" /> Generar Prospecto
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {currentSession.workflow === "onboarding" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                    <h4 className="font-semibold text-slate-900 flex items-center gap-1.5">
+                      <FileText className="h-4 w-4 text-indigo-500" /> Información Capturada (Resumen)
+                    </h4>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setIsFullDetailsOpen(true)}
+                      className="h-6 px-2 text-[10px] text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800"
+                    >
+                      <Eye className="h-3 w-3 mr-1" /> Ver Detalle
+                    </Button>
+                  </div>
+                  
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-4">
+                    <div>
+                      <p className="font-semibold text-slate-800 flex items-center gap-1 mb-0.5"><Building2 className="h-3 w-3 text-slate-500"/> Empresa</p>
+                      <p className="text-slate-600 pl-4">RFC: <span className="font-mono text-slate-900">{currentSession.ultimoAvance.empresa.rfc || "No capturado"}</span></p>
+                      <p className="text-slate-600 pl-4">Contacto: <span className="text-slate-900">{currentSession.ultimoAvance.contacto.nombreRepresentante || "No capturado"}</span></p>
+                    </div>
+                    
+                    <div>
+                      <p className="font-semibold text-slate-800 flex items-center gap-1 mb-0.5"><MapPin className="h-3 w-3 text-slate-500"/> Domicilio Fiscal</p>
+                      <p className="text-slate-600 pl-4 truncate">{currentSession.ultimoAvance.direccionFiscal.calle || "No capturado"}</p>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200">
+                      <p className="font-semibold text-slate-800 flex items-center gap-1 mb-1.5"><Truck className="h-3 w-3 text-slate-500"/> Destinatarios de Mercancía</p>
+                      {currentSession.ultimoAvance.direccionesEntrega && currentSession.ultimoAvance.direccionesEntrega.length > 0 ? (
+                        <p className="text-slate-600 pl-4">({currentSession.ultimoAvance.direccionesEntrega.length}) Plantas adicionales registradas.</p>
+                      ) : (
+                        <p className="text-slate-500 pl-4 italic">No se han registrado plantas adicionales.</p>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200">
+                      <p className="font-semibold text-slate-800 flex items-center gap-1 mb-0.5"><CreditCard className="h-3 w-3 text-slate-500"/> Datos Bancarios</p>
+                      <p className="text-slate-600 pl-4">{currentSession.ultimoAvance.facturacion.banco || "No capturado"} (**** {currentSession.ultimoAvance.facturacion.cuenta4Digitos || "0000"})</p>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200">
+                      <p className="font-semibold text-slate-800 flex items-center gap-1 mb-1.5"><FileText className="h-3 w-3 text-emerald-600"/> Documentos Adjuntos (Para validar)</p>
+                      <ul className="space-y-1.5 pl-4">
+                        <li><a href="#" className="text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1">Constancia_Situacion_Fiscal.pdf <ExternalLink className="h-3 w-3" /></a></li>
+                        <li><a href="#" className="text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1">Comprobante_Domicilio_Matriz.pdf <ExternalLink className="h-3 w-3" /></a></li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentSession.workflow === "onboarding" && (
+                <div className="space-y-3 pt-4 border-t border-slate-100">
+                  <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 pb-1">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600" /> Resolución Final SAC
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mb-2">Revisa el expediente completo. Puedes aprobarlo para el CRM o regresarlo al cliente para correcciones.</p>
+                  
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => handleSafeRequestCorrections(currentSession.sessionId)} className="w-1/2 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-9 text-xs gap-1.5">
+                      <XCircle className="h-3.5 w-3.5" /> Corregir
+                    </Button>
+                    <Button onClick={() => handleSafeApproveSession(currentSession.sessionId)} disabled={currentSession.status === "approved"} className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-xs gap-1.5 shadow-sm">
+                      <Send className="h-3.5 w-3.5" /> {currentSession.status === "approved" ? "Enviado" : "Aprobar"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: VISOR DE EXPEDIENTE COMPLETO */}
+      {/* ============================================================== */}
+      {isFullDetailsOpen && currentSession && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 lg:p-8 animate-in fade-in">
+          <Card className="w-full max-w-4xl max-h-[90vh] flex flex-col bg-white shadow-2xl border-0 overflow-hidden animate-in zoom-in-95">
+            <CardHeader className="bg-slate-50 border-b border-slate-200 flex-none shrink-0 py-4 px-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg text-slate-900 flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-indigo-600" /> Expediente Completo
+                  </CardTitle>
+                  <p className="text-xs text-slate-500 mt-1 font-mono">{currentSession.sessionId} - {currentSession.ultimoAvance.empresa.razonSocial}</p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setIsFullDetailsOpen(false)} className="text-slate-400 hover:bg-slate-200 rounded-full">
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                
+                <div className="space-y-6">
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2"><Building2 className="h-4 w-4 text-indigo-500"/> Información General</h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-500">Razón Social:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.empresa.razonSocial}</p></div>
+                      <div><span className="text-slate-500">RFC:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.empresa.rfc}</p></div>
+                      <div className="col-span-2"><span className="text-slate-500">Régimen Fiscal:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.empresa.regimenFiscal || "No especificado"}</p></div>
+                      <div className="col-span-2"><span className="text-slate-500">Giro Comercial:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.empresa.giroComercial || "No especificado"}</p></div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2"><User className="h-4 w-4 text-indigo-500"/> Contacto y Legal</h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="col-span-2"><span className="text-slate-500">Representante Legal:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.contacto.nombreRepresentante || "No especificado"}</p></div>
+                      <div><span className="text-slate-500">Correo Electrónico:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.contacto.correoContacto}</p></div>
+                      <div><span className="text-slate-500">Teléfono:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.contacto.telefonoContacto || "No especificado"}</p></div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2"><MapPin className="h-4 w-4 text-indigo-500"/> Domicilio Fiscal</h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="col-span-2"><span className="text-slate-500">Calle:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.direccionFiscal.calle || "No especificado"}</p></div>
+                      <div><span className="text-slate-500">Num. Exterior:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.direccionFiscal.numeroExterior || "N/A"}</p></div>
+                      <div><span className="text-slate-500">Código Postal:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.direccionFiscal.codigoPostal || "N/A"}</p></div>
+                      <div className="col-span-2"><span className="text-slate-500">Colonia:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.direccionFiscal.colonia || "No especificado"}</p></div>
+                      <div><span className="text-slate-500">Municipio:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.direccionFiscal.municipio || "No especificado"}</p></div>
+                      <div><span className="text-slate-500">Estado:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.direccionFiscal.estado || "No especificado"}</p></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2"><CreditCard className="h-4 w-4 text-indigo-500"/> Datos Bancarios y Facturación</h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-500">Banco:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.facturacion.banco || "No especificado"}</p></div>
+                      <div><span className="text-slate-500">Últimos 4 dígitos:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.facturacion.cuenta4Digitos || "No especificado"}</p></div>
+                      <div className="col-span-2"><span className="text-slate-500">Forma de Pago:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.facturacion.formaPago || "No especificado"}</p></div>
+                      <div className="col-span-2"><span className="text-slate-500">Método de Pago:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.facturacion.metodoPago || "No especificado"}</p></div>
+                      <div className="col-span-2"><span className="text-slate-500">Correo para Facturas:</span> <p className="font-semibold text-slate-900">{currentSession.ultimoAvance.facturacion.correoFacturas || "No especificado"}</p></div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2"><Truck className="h-4 w-4 text-indigo-500"/> Destinatarios de Mercancía (Plantas)</h4>
+                    {currentSession.ultimoAvance.direccionesEntrega && currentSession.ultimoAvance.direccionesEntrega.length > 0 ? (
+                      <div className="space-y-4">
+                        {currentSession.ultimoAvance.direccionesEntrega.map((planta, idx) => (
+                          <div key={idx} className="bg-slate-50 p-3 rounded border border-slate-100 text-xs">
+                            <p className="font-bold text-slate-800 mb-1">{planta.nombrePlanta}</p>
+                            <p className="text-slate-600"><span className="text-slate-500">Contacto:</span> {planta.contactoRecepcion} ({planta.telefonoRecepcion})</p>
+                            <p className="text-slate-600"><span className="text-slate-500">Dirección:</span> {planta.calle} #{planta.numeroExterior}, C.P. {planta.codigoPostal}</p>
+                            <p className="text-slate-600"><span className="text-slate-500">Zona:</span> {planta.municipio}, {planta.estado}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500 italic">No se agregaron direcciones de entrega adicionales. Mismo domicilio fiscal.</p>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* MODAL DE ALERTAS PERSONALIZADO */}
+      {activeAlert && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4 animate-in fade-in">
+          <Card className="max-w-md w-full bg-white shadow-2xl border-0 overflow-hidden animate-in zoom-in-95">
+            <CardHeader className={`
+              ${activeAlert.type === "approve" ? "bg-amber-50" : ""}
+              ${activeAlert.type === "correct" ? "bg-red-50" : ""}
+              ${activeAlert.type === "sync" || activeAlert.type === "promote" ? "bg-slate-50" : ""}
+              border-b border-slate-100 pb-4
+            `}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full 
+                  ${activeAlert.type === "approve" ? "bg-amber-100 text-amber-600" : ""}
+                  ${activeAlert.type === "correct" ? "bg-red-100 text-red-600" : ""}
+                  ${activeAlert.type === "sync" || activeAlert.type === "promote" ? "bg-indigo-100 text-indigo-600" : ""}
+                `}>
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <CardTitle className="text-base text-slate-900">
+                  {activeAlert.type === "sync" && "Generar Prospecto en CRM"}
+                  {activeAlert.type === "promote" && "Promover a Onboarding"}
+                  {activeAlert.type === "approve" && "Aprobar & Enriquecer CRM"}
+                  {activeAlert.type === "correct" && "Solicitar Correcciones al Cliente"}
+                </CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6 text-sm text-slate-600 space-y-4">
+              {activeAlert.type === "sync" && (
+                <p>¿Estás seguro de que deseas generar este registro como <strong>PROSPECTO</strong> en el CRM (SAP)? Esta acción creará un identificador comercial real.</p>
+              )}
+              {activeAlert.type === "promote" && (
+                <p>¿Confirmas que deseas enviar a este prospecto al proceso formal de <strong>ONBOARDING</strong>? El Magic Link se reactivará para solicitar domicilios y documentos.</p>
+              )}
+              {activeAlert.type === "approve" && (
+                <p>¿Estás completamente seguro de <strong>APROBAR</strong> este expediente? Enviará toda la información fiscal, domicilios y datos bancarios al CRM para el alta final.</p>
+              )}
+              {activeAlert.type === "correct" && (
+                <div className="space-y-4">
+                  <p>Selecciona los apartados que el cliente debe corregir. El portal le habilitará únicamente estas secciones para agilizar su respuesta.</p>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    {CORRECTION_OPTIONS.map((opt) => {
+                      const isSelected = correctionSections.includes(opt.id)
+                      const Icon = opt.icon
+                      return (
+                        <div 
+                          key={opt.id}
+                          onClick={() => toggleCorrectionSection(opt.id)}
+                          className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors text-xs
+                            ${isSelected ? "bg-red-50 border-red-300 text-red-800 font-semibold" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}
+                          `}
+                        >
+                          <Icon className={`h-4 w-4 ${isSelected ? "text-red-500" : "text-slate-400"}`} />
+                          {opt.label}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-800">Mensaje / Detalle de la corrección:</label>
+                    <textarea 
+                      value={correctionMessage}
+                      onChange={(e) => setCorrectionMessage(e.target.value)}
+                      className="w-full text-sm border border-slate-200 rounded p-2 focus:ring-red-500 focus:border-red-500" 
+                      rows={3} 
+                      placeholder="Ej. El comprobante de domicilio cargado en la sección de 'Documentos' está borroso..."
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+                <Button variant="outline" onClick={() => setActiveAlert(null)}>Cancelar</Button>
+                <Button 
+                  onClick={confirmAlertAction}
+                  disabled={activeAlert.type === "correct" && (correctionSections.length === 0 || !correctionMessage.trim())}
+                  className={`
+                    ${activeAlert.type === "approve" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}
+                    ${activeAlert.type === "correct" ? "bg-red-600 hover:bg-red-700 text-white" : ""}
+                    ${activeAlert.type === "sync" || activeAlert.type === "promote" ? "bg-indigo-600 hover:bg-indigo-700 text-white" : ""}
+                  `}
+                >
+                  Sí, Continuar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <LinkGeneratorModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSessionCreated={(s) => { onSessionCreated(s); }} />
+    </div>
+  )
+}
