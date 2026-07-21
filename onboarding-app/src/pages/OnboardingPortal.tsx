@@ -153,7 +153,7 @@ export function OnboardingPortal({ workflow = "onboarding" }: OnboardingPortalPr
               </CardHeader>
 
               <CardContent className="min-h-[260px] p-6 border-y border-slate-100 bg-white">
-                {currentStep === 1 && <StepCompany data={formData.empresa} onChange={updateCompanyData} />}
+                {currentStep === 1 && <StepCompany data={formData.empresa} onChange={updateCompanyData} workflow={workflow} />}
                 
                 {workflow === "onboarding" && (
                   <>
@@ -184,5 +184,6 @@ export function OnboardingPortal({ workflow = "onboarding" }: OnboardingPortalPr
         )}
       </main>
     </div>
+
   )
 }

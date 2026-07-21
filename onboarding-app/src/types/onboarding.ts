@@ -16,7 +16,7 @@ export interface AuditLogEntry {
 // 2. CONFIGURACIÓN COMERCIAL INTERNA SAC (RN-080)
 // ==========================================
 export interface CommercialConfig {
-  unidadNegocio: string // Obligatorio desde el inicio (Adyuvantes, Industrial DJP, etc.)
+  unidadNegocio: string
   tipoCliente?: string
   organizacionVentas: string
   canalDistribucion: string
@@ -27,9 +27,8 @@ export interface CommercialConfig {
   incoterms: string
   lugarEntrega: string
   moneda: string
-  usoCFDI: string
-  clasificacionIVA: string
-  clasificacionIEPS: string
+  prioridadEntrega: string
+  grupoClientes: string // Este sí se queda para SAC (Clasificación interna)
 }
 
 // ==========================================
@@ -58,6 +57,7 @@ export interface CompanyData {
   razonSocial: string
   rfc: string
   regimenFiscal: string
+  usoCFDI?: string      // NUEVO: Movido a la cancha del cliente
   giroComercial: string
 }
 
