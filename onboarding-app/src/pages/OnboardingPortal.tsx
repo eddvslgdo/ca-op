@@ -1,181 +1,430 @@
-import { useState } from "react"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Building2, MapPin, FileText, CheckCircle2, ArrowRight, ArrowLeft, Send, Truck, CreditCard } from "lucide-react"
-import { StepCompany } from "@/components/onboarding/StepCompany"
-import { StepAddress } from "@/components/onboarding/StepAddress"
-import { StepDelivery } from "@/components/onboarding/StepDelivery"
-import { StepBilling } from "@/components/onboarding/StepBilling"
-import { StepDocuments } from "@/components/onboarding/StepDocuments"
-import { StepSummary } from "@/components/onboarding/StepSummary"
-import type { OnboardingFormValues, BillingData } from "@/types/onboarding"
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import {
+  Building2,
+  MapPin,
+  FileText,
+  CheckCircle2,
+  ArrowRight,
+  ArrowLeft,
+  Send,
+  Truck,
+  CreditCard,
+  Loader2,
+  AlertTriangle,
+  CloudLightning,
+} from "lucide-react";
+import { StepCompany } from "@/components/onboarding/StepCompany";
+import { StepAddress } from "@/components/onboarding/StepAddress";
+import { StepDelivery } from "@/components/onboarding/StepDelivery";
+import { StepBilling } from "@/components/onboarding/StepBilling";
+import { StepDocuments } from "@/components/onboarding/StepDocuments";
+import { StepSummary } from "@/components/onboarding/StepSummary";
+import type { OnboardingFormValues, BillingData } from "@/types/onboarding";
+import { supabase } from "@/lib/supabase";
 
-// NUEVO: Recibimos el workflow para saber qué versión del portal mostrar (RN-081, RN-082)
-interface OnboardingPortalProps {
-  workflow?: "lead" | "onboarding"
-}
+export function OnboardingPortal() {
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("token");
 
-export function OnboardingPortal({ workflow = "onboarding" }: OnboardingPortalProps) {
-  const [currentStep, setCurrentStep] = useState<number>(1)
-  const [isSubmitted, setIsSubmitted] = useState(false)
+  // Estados de carga y validación
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false); // NUEVO: Estado para el autoguardado visual
+  const [invalidToken, setInvalidToken] = useState(false);
+  const [workflow, setWorkflow] = useState<"lead" | "onboarding">("lead");
+  const [dbSessionId, setDbSessionId] = useState("");
+
+  const [currentStep, setCurrentStep] = useState<number>(1);
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   const [formData, setFormData] = useState<OnboardingFormValues>({
-    empresa: {
-      razonSocial: "",
-      rfc: "",
-      regimenFiscal: "",
-      giroComercial: "",
+    empresa: { razonSocial: "", rfc: "", regimenFiscal: "", usoCFDI: "" }, // <-- Eliminado giroComercial
+    direccionFiscal: {
+      codigoPostal: "",
+      tipoVialidad: "",
+      calle: "", // Nombre de Vialidad
+      numeroExterior: "",
+      numeroInterior: "",
+      colonia: "",
+      localidad: "",
+      municipio: "",
+      estado: "",
+      entreCalle: "",
+      yCalle: "",
     },
-    direccionFiscal: { calle: "", numeroExterior: "", colonia: "", codigoPostal: "", estado: "", municipio: "" },
     direccionesEntrega: [],
-    contacto: { nombreRepresentante: "", correoContacto: "", telefonoContacto: "" },
-    facturacion: { banco: "", cuenta4Digitos: "", metodoPago: "", formaPago: "", correoFacturas: "" }
-  })
+    contacto: {
+      nombreRepresentante: "",
+      correoContacto: "",
+      telefonoContacto: "",
+    },
+    facturacion: {
+      banco: "",
+      cuenta4Digitos: "",
+      metodoPago: "",
+      formaPago: "",
+      correoFacturas: "",
+    },
+  });
 
-  // NUEVO: Dinamismo en los pasos. Lead = 1 paso. Onboarding = 6 pasos.
-  const totalSteps = workflow === "lead" ? 1 : 6
-  const progressPercentage = (currentStep / totalSteps) * 100
-
-  const updateCompanyData = (fields: Partial<typeof formData.empresa>) => {
-    setFormData((prev) => ({ ...prev, empresa: { ...prev.empresa, ...fields } }))
-  }
-
-  const updateFiscalAddress = (fields: Partial<typeof formData.direccionFiscal>) => {
-    setFormData((prev) => ({ ...prev, direccionFiscal: { ...prev.direccionFiscal, ...fields } }))
-  }
-
-  const updateDeliveryAddresses = (addresses: typeof formData.direccionesEntrega) => {
-    setFormData((prev) => ({ ...prev, direccionesEntrega: addresses }))
-  }
-
-  const updateContactData = (fields: Partial<typeof formData.contacto>) => {
-    setFormData((prev) => ({ ...prev, contacto: { ...prev.contacto, ...fields } }))
-  }
-
-  const updateBillingData = (fields: Partial<BillingData>) => {
-    setFormData((prev) => ({ ...prev, facturacion: { ...prev.facturacion, ...fields } }))
-  }
-
-  const handleNext = () => {
-    if (currentStep < totalSteps) {
-      setCurrentStep((prev) => prev + 1)
-    } else {
-      setIsSubmitted(true)
+  // EFECTO: Buscar la sesión en Supabase usando el Token
+  useEffect(() => {
+    if (!token) {
+      setInvalidToken(true);
+      setIsLoading(false);
+      return;
     }
-  }
+
+    const fetchSessionData = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("sessions")
+          .select("*")
+          .eq("token", token)
+          .single();
+
+        if (error || !data) {
+          setInvalidToken(true);
+        } else {
+          // Bloquear si ya fue completado o aprobado
+          if (
+            data.status === "completed_by_client" ||
+            data.status === "approved"
+          ) {
+            setIsSubmitted(true);
+          }
+
+          setWorkflow(data.workflow);
+          setDbSessionId(data.session_id);
+
+          // Pre-cargamos el formulario con los datos de Supabase
+          if (data.ultimo_avance) {
+            setFormData(data.ultimo_avance);
+          }
+        }
+      } catch (err) {
+        setInvalidToken(true);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSessionData();
+  }, [token]);
+
+  const totalSteps = workflow === "lead" ? 1 : 6;
+  const progressPercentage = (currentStep / totalSteps) * 100;
+
+  const updateCompanyData = (fields: Partial<typeof formData.empresa>) =>
+    setFormData((prev) => ({
+      ...prev,
+      empresa: { ...prev.empresa, ...fields },
+    }));
+  const updateFiscalAddress = (
+    fields: Partial<typeof formData.direccionFiscal>,
+  ) =>
+    setFormData((prev) => ({
+      ...prev,
+      direccionFiscal: { ...prev.direccionFiscal, ...fields },
+    }));
+  const updateDeliveryAddresses = (
+    addresses: typeof formData.direccionesEntrega,
+  ) => setFormData((prev) => ({ ...prev, direccionesEntrega: addresses }));
+  const updateContactData = (fields: Partial<typeof formData.contacto>) =>
+    setFormData((prev) => ({
+      ...prev,
+      contacto: { ...prev.contacto, ...fields },
+    }));
+  const updateBillingData = (fields: Partial<BillingData>) =>
+    setFormData((prev) => ({
+      ...prev,
+      facturacion: { ...prev.facturacion, ...fields },
+    }));
+
+  // FUNCIÓN PARA AUTOGUARDADO EN SUPABASE
+  const handleNext = async () => {
+    // Validar teléfono obligatorio antes de avanzar (Asumiendo que el paso 1 tiene el teléfono de contacto o representante)
+    if (workflow === "lead" && currentStep === 1) {
+      if (
+        !formData.contacto.telefonoContacto ||
+        formData.contacto.telefonoContacto.trim() === ""
+      ) {
+        alert(
+          "El número de teléfono es obligatorio para completar el registro.",
+        );
+        return; // Detiene el avance
+      }
+    } else if (workflow === "onboarding" && currentStep === 2) {
+      // Si en tu diseño el teléfono está en el paso 2 (StepAddress)
+      if (
+        !formData.contacto.telefonoContacto ||
+        formData.contacto.telefonoContacto.trim() === ""
+      ) {
+        alert("El número de teléfono de contacto es obligatorio.");
+        return;
+      }
+    }
+
+    setIsSaving(true);
+    try {
+      if (currentStep < totalSteps) {
+        // Auto-guardado en la nube
+        await supabase
+          .from("sessions")
+          .update({ ultimo_avance: formData })
+          .eq("session_id", dbSessionId);
+        setCurrentStep((prev) => prev + 1);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        // Guardado final
+        await supabase
+          .from("sessions")
+          .update({
+            ultimo_avance: formData,
+            status: "completed_by_client",
+          })
+          .eq("session_id", dbSessionId);
+
+        setIsSubmitted(true);
+      }
+    } catch (error) {
+      console.error("Error al guardar:", error);
+      alert("Hubo un problema guardando tu progreso, pero puedes continuar.");
+    } finally {
+      // Pequeño timeout para que el usuario alcance a ver el letrero de "Guardado"
+      setTimeout(() => setIsSaving(false), 500);
+    }
+  };
 
   const handleBack = () => {
-    if (currentStep > 1) setCurrentStep((prev) => prev - 1)
+    if (currentStep > 1) {
+      setCurrentStep((prev) => prev - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
+        <Loader2 className="h-10 w-10 text-indigo-600 animate-spin mb-4" />
+        <p className="text-slate-500 font-medium">
+          Autenticando enlace seguro...
+        </p>
+      </div>
+    );
+  }
+
+  if (invalidToken) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full text-center p-8 border-slate-200 shadow-xl">
+          <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+          <CardTitle className="text-xl mb-2 text-slate-900">
+            Enlace Inválido o Expirado
+          </CardTitle>
+          <CardDescription>
+            Este enlace de registro no existe o ha caducado. Por favor, solicita
+            a tu ejecutivo comercial de Grupo Polak que genere uno nuevo.
+          </CardDescription>
+        </Card>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-start p-4 md:p-8">
-      <header className="w-full max-w-4xl flex items-center justify-between mb-8 pb-4 border-b border-slate-200">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Grupo Polak</h1>
-          <p className="text-xs text-slate-500">
-            {workflow === "lead" ? "Registro de Prospecto Comercial" : "Portal de Incorporación de Clientes B2B"}
-          </p>
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-start relative">
+      {/* HEADER FIJO CON INDICADOR DE GUARDADO */}
+      <header className="w-full bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-50 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 bg-indigo-600 rounded flex items-center justify-center font-bold text-white">
+            P
+          </div>
+          <div>
+            <h1 className="text-sm md:text-base font-bold text-slate-900 tracking-tight">
+              Grupo Polak
+            </h1>
+            <p className="text-[10px] md:text-xs text-slate-500 hidden md:block">
+              {workflow === "lead"
+                ? "Registro de Prospecto Comercial"
+                : "Portal de Incorporación de Clientes B2B"}
+            </p>
+          </div>
         </div>
-        <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
-          isSubmitted ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-        }`}>
-          <span className={`h-2 w-2 rounded-full ${isSubmitted ? "bg-amber-500" : "bg-emerald-500 animate-pulse"}`} />
-          {isSubmitted ? "En Revisión" : "Sesión Activa"}
-        </div>
+
+        {/* INDICADOR DE STATUS / GUARDADO */}
+        {isSubmitted ? (
+          <div className="flex items-center gap-2 text-xs font-medium text-amber-700 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200">
+            <span className="h-2 w-2 rounded-full bg-amber-500" /> En Revisión
+          </div>
+        ) : isSaving ? (
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Guardando...
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200 transition-all duration-300">
+            <CloudLightning className="h-3.5 w-3.5" /> Progreso guardado
+          </div>
+        )}
       </header>
 
-      <main className="w-full max-w-2xl space-y-6">
+      <main className="w-full max-w-3xl space-y-6 p-4 md:p-8 mt-4">
         {isSubmitted ? (
-          <Card className="shadow-sm border-slate-200 text-center p-8 space-y-4 animate-in fade-in zoom-in-95">
-            <div className="h-16 w-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+          <Card className="shadow-xl border-slate-200 text-center p-8 md:p-12 space-y-6 animate-in fade-in slide-in-from-bottom-4">
+            <div className="h-20 w-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto border-8 border-emerald-50">
               <CheckCircle2 className="h-10 w-10" />
             </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-slate-900">
-                {workflow === "lead" ? "¡Datos Enviados Correctamente!" : "¡Registro Enviado con Éxito!"}
+            <div className="space-y-3">
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-900">
+                ¡Datos Enviados Correctamente!
               </h2>
-              <p className="text-sm text-slate-600 max-w-md mx-auto">
-                {workflow === "lead" 
-                  ? "Un ejecutivo comercial evaluará tu información para contactarte a la brevedad."
-                  : "Tu solicitud de alta y expediente digital han sido recibidos. Nuestro equipo de Servicio a Clientes (SAC) validará la información en las próximas horas."}
+              <p className="text-sm md:text-base text-slate-600 max-w-md mx-auto">
+                Tu información ha sido guardada de forma segura. Nuestro
+                departamento de SAC (Servicio a Clientes) validará tu expediente
+                comercial en breve.
               </p>
             </div>
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 inline-block text-xs text-slate-500">
-              Folio de Solicitud: <strong className="text-slate-800">POLAK-2026-08942</strong>
+            <div className="pt-6">
+              <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">
+                Puedes cerrar esta ventana.
+              </p>
             </div>
           </Card>
         ) : (
           <>
-            <div className="space-y-3">
-              <div className="flex justify-between text-xs font-medium text-slate-600">
-                <span>Paso {currentStep} de {totalSteps}</span>
+            <div className="space-y-3 px-2">
+              <div className="flex justify-between text-xs font-medium text-slate-500">
+                <span>
+                  Paso {currentStep} de {totalSteps}
+                </span>
                 <span>{Math.round(progressPercentage)}% Completado</span>
               </div>
               <Progress value={progressPercentage} className="h-2" />
-              
-              {/* NUEVO: Stepper Dinámico (Oculta pasos si es solo Lead) */}
+
               {workflow === "onboarding" ? (
-                <div className="grid grid-cols-6 gap-2 pt-2 text-center text-xs">
-                  <div className={`flex flex-col items-center gap-1 ${currentStep >= 1 ? "text-slate-900 font-semibold" : "text-slate-400"}`}><Building2 className="h-4 w-4" /><span>Empresa</span></div>
-                  <div className={`flex flex-col items-center gap-1 ${currentStep >= 2 ? "text-slate-900 font-semibold" : "text-slate-400"}`}><MapPin className="h-4 w-4" /><span>Domicilio</span></div>
-                  <div className={`flex flex-col items-center gap-1 ${currentStep >= 3 ? "text-slate-900 font-semibold" : "text-slate-400"}`}><Truck className="h-4 w-4" /><span>Entregas</span></div>
-                  <div className={`flex flex-col items-center gap-1 ${currentStep >= 4 ? "text-slate-900 font-semibold" : "text-slate-400"}`}><CreditCard className="h-4 w-4" /><span>Facturación</span></div>
-                  <div className={`flex flex-col items-center gap-1 ${currentStep >= 5 ? "text-slate-900 font-semibold" : "text-slate-400"}`}><FileText className="h-4 w-4" /><span>Documentos</span></div>
-                  <div className={`flex flex-col items-center gap-1 ${currentStep >= 6 ? "text-slate-900 font-semibold" : "text-slate-400"}`}><CheckCircle2 className="h-4 w-4" /><span>Firma</span></div>
+                <div className="grid grid-cols-6 gap-2 pt-2 text-center text-[10px] md:text-xs">
+                  <div
+                    className={`flex flex-col items-center gap-1 ${currentStep >= 1 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
+                  >
+                    <Building2 className="h-4 w-4" />
+                    <span className="hidden md:block">Empresa</span>
+                  </div>
+                  <div
+                    className={`flex flex-col items-center gap-1 ${currentStep >= 2 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
+                  >
+                    <MapPin className="h-4 w-4" />
+                    <span className="hidden md:block">Domicilio</span>
+                  </div>
+                  <div
+                    className={`flex flex-col items-center gap-1 ${currentStep >= 3 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
+                  >
+                    <Truck className="h-4 w-4" />
+                    <span className="hidden md:block">Entregas</span>
+                  </div>
+                  <div
+                    className={`flex flex-col items-center gap-1 ${currentStep >= 4 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    <span className="hidden md:block">Facturación</span>
+                  </div>
+                  <div
+                    className={`flex flex-col items-center gap-1 ${currentStep >= 5 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
+                  >
+                    <FileText className="h-4 w-4" />
+                    <span className="hidden md:block">Documentos</span>
+                  </div>
+                  <div
+                    className={`flex flex-col items-center gap-1 ${currentStep >= 6 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span className="hidden md:block">Resumen</span>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-2 pt-2 text-center text-xs">
-                   <div className="flex flex-col items-center gap-1 text-slate-900 font-semibold"><Building2 className="h-4 w-4" /><span>Datos Base del Prospecto</span></div>
+                  <div className="flex flex-col items-center gap-1 text-indigo-700 font-bold">
+                    <Building2 className="h-4 w-4" />
+                    <span>Datos Base del Prospecto</span>
+                  </div>
                 </div>
               )}
             </div>
 
-            <Card className="shadow-sm border-slate-200">
-              <CardHeader>
-                <CardTitle className="text-lg text-slate-800">
-                  {currentStep === 1 && "Información General de la Empresa"}
-                  {currentStep === 2 && "Domicilio Fiscal y Contacto"}
-                  {currentStep === 3 && "Plantas y Direcciones de Entrega"}
-                  {currentStep === 4 && "Datos Bancarios y Facturación"}
-                  {currentStep === 5 && "Documentación Requerida"}
-                  {currentStep === 6 && "Confirmación y Envío"}
-                </CardTitle>
-                <CardDescription>
-                  {currentStep === 1 && "Ingresa los datos fiscales principales de tu representada."}
-                  {currentStep === 2 && "Proporciona la dirección fiscal registrada ante el SAT y el representante legal."}
-                  {currentStep === 3 && "Registra los almacenes o plantas donde recibirás mercancía física."}
-                  {currentStep === 4 && "Proporciona los datos de la cuenta desde donde realizarás los pagos."}
-                  {currentStep === 5 && "Adjunta los expedientes en formato PDF o imagen."}
-                  {currentStep === 6 && "Revisa la información antes de enviar el registro a validación."}
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="min-h-[260px] p-6 border-y border-slate-100 bg-white">
-                {currentStep === 1 && <StepCompany data={formData.empresa} onChange={updateCompanyData} workflow={workflow} />}
-                
+            <Card className="shadow-xl border-slate-200 animate-in fade-in slide-in-from-bottom-4">
+              <CardContent className="min-h-[350px] p-6 md:p-8 border-y border-slate-100 bg-white">
+                {currentStep === 1 && (
+                  <StepCompany
+                    data={formData.empresa}
+                    onChange={updateCompanyData}
+                    workflow={workflow}
+                    contactData={formData.contacto}
+                    onContactChange={updateContactData}
+                  />
+                )}
                 {workflow === "onboarding" && (
                   <>
-                    {currentStep === 2 && <StepAddress fiscalAddress={formData.direccionFiscal} contactData={formData.contacto} onFiscalChange={updateFiscalAddress} onContactChange={updateContactData} />}
-                    {currentStep === 3 && <StepDelivery deliveryAddresses={formData.direccionesEntrega} onDeliveryChange={updateDeliveryAddresses} />}
-                    {currentStep === 4 && <StepBilling data={formData.facturacion} onChange={updateBillingData} />}
+                    {currentStep === 2 && (
+                      <StepAddress
+                        fiscalAddress={formData.direccionFiscal}
+                        contactData={formData.contacto}
+                        onFiscalChange={updateFiscalAddress}
+                        onContactChange={updateContactData}
+                      />
+                    )}
+                    {currentStep === 3 && (
+                      <StepDelivery
+                        deliveryAddresses={formData.direccionesEntrega}
+                        onDeliveryChange={updateDeliveryAddresses}
+                      />
+                    )}
+                    {currentStep === 4 && (
+                      <StepBilling
+                        data={formData.facturacion}
+                        onChange={updateBillingData}
+                      />
+                    )}
                     {currentStep === 5 && <StepDocuments />}
                     {currentStep === 6 && <StepSummary formData={formData} />}
                   </>
                 )}
               </CardContent>
 
-              <CardFooter className="flex justify-between pt-4">
-                <Button variant="outline" onClick={handleBack} disabled={currentStep === 1} className={`gap-2 ${workflow === "lead" ? "invisible" : ""}`}>
+              <CardFooter className="flex justify-between p-6 bg-slate-50/50">
+                <Button
+                  variant="outline"
+                  onClick={handleBack}
+                  disabled={currentStep === 1 || isSaving}
+                  className={`gap-2 h-11 px-6 font-semibold border-slate-300 text-slate-700 ${workflow === "lead" ? "invisible" : ""}`}
+                >
                   <ArrowLeft className="h-4 w-4" /> Anterior
                 </Button>
 
-                <Button onClick={handleNext} className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white">
-                  {currentStep === totalSteps ? (
-                    <>Enviar Información <Send className="h-4 w-4" /></>
+                <Button
+                  onClick={handleNext}
+                  disabled={isSaving}
+                  className="gap-2 h-11 px-6 font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-all"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Guardando...
+                    </>
+                  ) : currentStep === totalSteps ? (
+                    <>
+                      Enviar Información <Send className="h-4 w-4" />
+                    </>
                   ) : (
-                    <>Siguiente <ArrowRight className="h-4 w-4" /></>
+                    <>
+                      Guardar y Continuar <ArrowRight className="h-4 w-4" />
+                    </>
                   )}
                 </Button>
               </CardFooter>
@@ -184,6 +433,5 @@ export function OnboardingPortal({ workflow = "onboarding" }: OnboardingPortalPr
         )}
       </main>
     </div>
-
-  )
+  );
 }

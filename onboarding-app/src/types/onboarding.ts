@@ -2,7 +2,7 @@
 // 1. ESTADO, WORKFLOW Y AUDITORÍA DE SESIÓN (RN-077 a RN-089)
 // ==========================================
 export type SessionWorkflow = "lead" | "onboarding" // RN-081
-export type SessionStatus = "active" | "expired" | "submitted" | "approved" | "corrections_requested"
+export type SessionStatus = "active" | "expired" | "submitted" | "approved" | "corrections_requested" | "completed_by_client"
 
 export interface AuditLogEntry {
   id: string
@@ -15,9 +15,18 @@ export interface AuditLogEntry {
 // ==========================================
 // 2. CONFIGURACIÓN COMERCIAL INTERNA SAC (RN-080)
 // ==========================================
+export interface TaxConfig {
+  iva: string
+  ieps: string
+}
+
 export interface CommercialConfig {
+  // Datos Generales heredados por área
   unidadNegocio: string
   tipoCliente?: string
+  impuestos: TaxConfig
+  
+  // Datos específicos del área de ventas (SAP)
   organizacionVentas: string
   canalDistribucion: string
   division: string
@@ -28,7 +37,7 @@ export interface CommercialConfig {
   lugarEntrega: string
   moneda: string
   prioridadEntrega: string
-  grupoClientes: string // Este sí se queda para SAC (Clasificación interna)
+  grupoClientes: string
 }
 
 // ==========================================
@@ -36,16 +45,16 @@ export interface CommercialConfig {
 // ==========================================
 export interface MagicLinkSession {
   sessionId: string 
-  workflow: SessionWorkflow // Determina qué ve el cliente
+  workflow: SessionWorkflow 
   crmProspectId?: string 
   token: string
   clienteExisteEnCRM: boolean 
-  configComercial: CommercialConfig 
+  configComercial: CommercialConfig[] // AHORA ES UN ARREGLO (Múltiples Áreas de Venta)
   fechaCreacion: string
   fechaExpiracion: string
   reactivacionesCount: number
   status: SessionStatus
-  ultimoAvance: OnboardingFormValues // Conserva todo el avance (RN-086)
+  ultimoAvance: OnboardingFormValues 
   documentosTemporales: Record<string, { nombreArchivo: string; urlTemp: string; estatus: "ok" | "rechazado" }>
   auditLogs: AuditLogEntry[]
 }
@@ -57,18 +66,23 @@ export interface CompanyData {
   razonSocial: string
   rfc: string
   regimenFiscal: string
-  usoCFDI?: string      // NUEVO: Movido a la cancha del cliente
-  giroComercial: string
+  usoCFDI?: string 
+  // Giro comercial eliminado para evitar ambigüedades
 }
 
+// ESTRUCTURA ACTUALIZADA: Basada en Constancia de Situación Fiscal (SAT)
 export interface AddressData {
-  calle: string
+  codigoPostal: string
+  tipoVialidad: string
+  calle: string         // Equivale a "Nombre de Vialidad"
   numeroExterior: string
   numeroInterior?: string
   colonia: string
-  codigoPostal: string
-  estado: string
-  municipio: string
+  localidad?: string
+  municipio: string     // Equivale a "Municipio o Demarcación Territorial"
+  estado: string        // Equivale a "Entidad Federativa"
+  entreCalle?: string
+  yCalle?: string
 }
 
 export interface DeliveryAddressData {

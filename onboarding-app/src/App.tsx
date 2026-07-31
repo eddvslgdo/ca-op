@@ -1,140 +1,140 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { OnboardingPortal } from "@/pages/OnboardingPortal"
 import { SacWorkspace } from "@/pages/SacWorkspace"
-import { Button } from "@/components/ui/button"
-import { UserCheck, ShieldAlert } from "lucide-react"
+import { CreateSessionPage } from "@/pages/CreateSessionPage"
 import type { MagicLinkSession } from "@/types/onboarding"
+import { supabase } from "@/lib/supabase"
 
-function App() {
-  const [currentView, setCurrentView] = useState<"client_portal" | "sac_workspace">("sac_workspace")
-  const [activePortalWorkflow, setActivePortalWorkflow] = useState<"lead" | "onboarding">("lead")
+// ------------------------------------------------------------------
+// 1. COMPONENTE DEL DASHBOARD DE SAC
+// ------------------------------------------------------------------
+function SacDashboard() {
+  const [sessions, setSessions] = useState<MagicLinkSession[]>([])
 
-  const [sessions, setSessions] = useState<MagicLinkSession[]>([
-    {
-      sessionId: "SES-POLAK-01",
-      workflow: "lead",
-      token: "xyz789token",
-      clienteExisteEnCRM: false,
-      configComercial: {
-        unidadNegocio: "Industrial PQ",
-        organizacionVentas: "Polak Grupo Industrial",
-        canalDistribucion: "Industrial",
-        division: "Nacional",
-        oficinaVentas: "Gte. Div. Ind. PQ",
-        grupoVendedores: "Gte. Vta. Industrial",
-        condicionesPago: "CONT Contado",
-        incoterms: "En fábrica",
-        lugarEntrega: "CIA",
-        moneda: "MXN",
-        usoCFDI: "G03 Gastos en general",
-        clasificacionIVA: "1 - Sujeto a impuestos",
-        clasificacionIEPS: "0 - Exento de impto."
-      },
-      fechaCreacion: "24/07/2026",
-      fechaExpiracion: "27/07/2026",
-      reactivacionesCount: 0,
-      status: "active",
-      ultimoAvance: {
-        empresa: { razonSocial: "QUIMICA MEXICANA DEL BAJIO S.A.", rfc: "QMB980412KK0", regimenFiscal: "", giroComercial: "" },
-        direccionFiscal: { calle: "", numeroExterior: "", colonia: "", codigoPostal: "", estado: "", municipio: "" },
-        direccionesEntrega: [],
-        contacto: { nombreRepresentante: "Fernando Castro", correoContacto: "fcastro@quimicabajio.com", telefonoContacto: "477 123 4567" },
-        facturacion: { banco: "", cuenta4Digitos: "", metodoPago: "", formaPago: "", correoFacturas: "" }
-      },
-      documentosTemporales: {},
-      auditLogs: [
-        { id: "LOG-01", fechaHora: new Date().toLocaleString("es-MX"), usuario: "SAC", accion: "Creación de Sesión (LEAD)", resultado: "Exitoso" }
-      ]
+  useEffect(() => {
+    // 1. Carga inicial
+    fetchSessions()
+
+    // 2. MAGIA DE TIEMPO REAL (Supabase Realtime)
+    // Escucha cualquier cambio (Insert, Update, Delete) en la tabla 'sessions'
+    const subscription = supabase
+      .channel('public:sessions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, (payload) => {
+        console.log('Cambio detectado desde Supabase:', payload)
+        fetchSessions() // Recarga los datos automáticamente en segundo plano
+      })
+      .subscribe()
+
+    // 3. Limpieza de la suscripción al desmontar
+    return () => {
+      supabase.removeChannel(subscription)
     }
-  ])
+  }, [])
 
-  const handleSessionCreated = (newSession: MagicLinkSession) => {
-    setSessions((prev) => [newSession, ...prev])
+  const fetchSessions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      if (data) {
+        const sesionesRecuperadas = data.map((row: any) => ({
+          sessionId: row.session_id,
+          workflow: row.workflow,
+          token: row.token,
+          crmProspectId: row.crm_prospect_id,
+          clienteExisteEnCRM: !!row.crm_prospect_id,
+          configComercial: row.config_comercial,
+          fechaCreacion: new Date(row.created_at).toLocaleDateString("es-MX"),
+          fechaExpiracion: new Date(row.expires_at).toLocaleDateString("es-MX"),
+          reactivacionesCount: row.reactivaciones_count,
+          status: row.status,
+          ultimoAvance: row.ultimo_avance,
+          documentosTemporales: {},
+          auditLogs: [] 
+        }))
+        setSessions(sesionesRecuperadas)
+      }
+    } catch (error) {
+      console.error("Error al cargar las sesiones desde Supabase:", error)
+    }
   }
 
-  // NUEVO: Sincronizar Sesión Lead con CRM (Genera ID)
-  const handleSyncSessionToCRM = (sessionId: string) => {
-    setSessions((prev) => prev.map((s) => {
-      if (s.sessionId === sessionId) {
-        return {
-          ...s,
-          crmProspectId: `CRM-${Math.floor(Math.random() * 10000) + 10000}`,
-          auditLogs: [...s.auditLogs, { id: `LOG-${Date.now()}`, fechaHora: new Date().toLocaleString("es-MX"), usuario: "Sistema", accion: "Sincronización inicial con CRM (Cotización)", resultado: "ID Asignado" }]
-        }
-      }
-      return s
-    }))
+  const handleSyncSessionToCRM = async (sessionId: string) => {
+    const fakeCrmId = `CRM-${Math.floor(Math.random() * 10000) + 10000}`
+    try {
+      await supabase.from('sessions').update({ crm_prospect_id: fakeCrmId }).eq('session_id', sessionId)
+      await supabase.from('audit_logs').insert([{ session_id: sessionId, usuario: "Sistema", accion: "Sincronización inicial con CRM", resultado: "ID Asignado" }])
+      fetchSessions()
+    } catch (error) { console.error(error) }
   }
 
-  const handlePromoteToOnboarding = (sessionId: string) => {
-    setSessions((prev) => prev.map((s) => {
-      if (s.sessionId === sessionId) {
-        const now = new Date()
-        const newExp = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
-        return {
-          ...s,
-          workflow: "onboarding",
-          status: "active",
-          fechaExpiracion: newExp.toLocaleDateString("es-MX"),
-          reactivacionesCount: s.reactivacionesCount + 1,
-          auditLogs: [...s.auditLogs, { id: `LOG-${Date.now()}`, fechaHora: new Date().toLocaleString("es-MX"), usuario: "SAC", accion: "Promoción a ONBOARDING y Reactivación", resultado: "Exitoso" }]
-        }
-      }
-      return s
-    }))
+  const handlePromoteToOnboarding = async (sessionId: string) => {
+    const sessionActual = sessions.find(s => s.sessionId === sessionId)
+    if (!sessionActual) return
+    const newExp = new Date(new Date().getTime() + 3 * 24 * 60 * 60 * 1000)
+    try {
+      await supabase.from('sessions').update({ workflow: 'onboarding', status: 'active', expires_at: newExp.toISOString(), reactivaciones_count: sessionActual.reactivacionesCount + 1 }).eq('session_id', sessionId)
+      await supabase.from('audit_logs').insert([{ session_id: sessionId, usuario: "SAC", accion: "Promoción a ONBOARDING", resultado: "Exitoso" }])
+      fetchSessions()
+    } catch (error) { console.error(error) }
   }
 
-  const handleApproveSession = (sessionId: string) => {
-    setSessions((prev) => prev.map((s) => {
-      if (s.sessionId === sessionId) {
-        return {
-          ...s,
-          status: "approved",
-          auditLogs: [...s.auditLogs, { id: `LOG-${Date.now()}`, fechaHora: new Date().toLocaleString("es-MX"), usuario: "SAC", accion: "Aprobación y Enriquecimiento Final CRM", resultado: "Payload Enviado" }]
-        }
-      }
-      return s
-    }))
+  const handleApproveSession = async (sessionId: string) => {
+    try {
+      await supabase.from('sessions').update({ status: 'approved' }).eq('session_id', sessionId)
+      await supabase.from('audit_logs').insert([{ session_id: sessionId, usuario: "SAC (Revisor)", accion: "Aprobación y Enriquecimiento CRM", resultado: "Enviado" }])
+      fetchSessions()
+    } catch (error) { console.error(error) }
+  }
+
+  // Agregada la función para Reactivar Enlaces Vencidos
+  const handleReactivateSession = async (sessionId: string) => {
+    const newExp = new Date(new Date().getTime() + 3 * 24 * 60 * 60 * 1000)
+    try {
+      await supabase.from('sessions').update({ status: 'active', expires_at: newExp.toISOString() }).eq('session_id', sessionId)
+      await supabase.from('audit_logs').insert([{ session_id: sessionId, usuario: "SAC", accion: "Reactivación / Extensión de Link", resultado: "+3 Días" }])
+      fetchSessions()
+    } catch (error) { console.error(error) }
   }
 
   return (
-    <div>
-      <nav className="bg-slate-950 text-slate-300 text-xs px-4 py-2 flex items-center justify-between border-b border-slate-800">
+    <div className="min-h-screen bg-slate-50">
+      <nav className="bg-slate-950 text-slate-300 text-xs px-4 py-3 flex items-center justify-between border-b border-slate-800">
         <span className="font-semibold text-slate-400 flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
-          Arquitectura Basada en Sesiones (RN-077 a RN-089)
+          Workspace SAC - Control de Accesos
         </span>
-        <div className="flex items-center gap-1.5">
-          <Button size="sm" variant={currentView === "client_portal" && activePortalWorkflow === "lead" ? "default" : "ghost"} className="h-7 text-xs"
-            onClick={() => { setCurrentView("client_portal"); setActivePortalWorkflow("lead"); }}>
-            Vista Cliente: LEAD
-          </Button>
-          <Button size="sm" variant={currentView === "client_portal" && activePortalWorkflow === "onboarding" ? "default" : "ghost"} className="h-7 text-xs"
-            onClick={() => { setCurrentView("client_portal"); setActivePortalWorkflow("onboarding"); }}>
-            Vista Cliente: ONBOARDING
-          </Button>
-          <Button size="sm" variant={currentView === "sac_workspace" ? "default" : "ghost"} className="h-7 text-xs"
-            onClick={() => setCurrentView("sac_workspace")}>
-            <ShieldAlert className="h-3.5 w-3.5 mr-1" /> Workspace SAC
-          </Button>
-        </div>
       </nav>
-
-      {currentView === "client_portal" && (
-        <OnboardingPortal workflow={activePortalWorkflow} /> 
-      )}
-      
-      {currentView === "sac_workspace" && (
-        <SacWorkspace 
-          sessions={sessions}
-          onSessionCreated={handleSessionCreated}
-          onPromoteToOnboarding={handlePromoteToOnboarding}
-          onSyncSessionToCRM={handleSyncSessionToCRM}
-          onApproveSession={handleApproveSession}
-        />
-      )}
+      <SacWorkspace 
+        sessions={sessions}
+        onSessionCreated={() => fetchSessions()}
+        onPromoteToOnboarding={handlePromoteToOnboarding}
+        onSyncSessionToCRM={handleSyncSessionToCRM}
+        onApproveSession={handleApproveSession}
+        onReactivateSession={handleReactivateSession} 
+        onRefresh={fetchSessions} // Vinculamos el botón de actualización manual
+      />
     </div>
   )
 }
 
-export default App
+// ------------------------------------------------------------------
+// 2. ENRUTADOR PRINCIPAL (Solo 2 Rutas)
+// ------------------------------------------------------------------
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<SacDashboard />} />
+        <Route path="/sac/nueva-sesion" element={<CreateSessionPage />} />
+        <Route path="/registro/magic-link" element={<OnboardingPortal />} />
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}

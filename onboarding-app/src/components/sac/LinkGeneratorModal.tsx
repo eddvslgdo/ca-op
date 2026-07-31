@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Link2, Copy, Check, Key, Sparkles, X, Clock, Loader2, MailCheck } from "lucide-react"
 import type { MagicLinkSession, CommercialConfig, SessionWorkflow } from "@/types/onboarding"
+import { supabase } from "@/lib/supabase"
 
 interface LinkGeneratorModalProps {
   isOpen: boolean
@@ -18,15 +19,13 @@ export function LinkGeneratorModal({ isOpen, onClose, onSessionCreated }: LinkGe
   const [copiedCustom, setCopiedCustom] = useState(false)
   const [workflow, setWorkflow] = useState<SessionWorkflow>("lead")
 
-  const [companyName, setCompanyName] = useState("")
-  const [rfc, setRfc] = useState("")
+  // ESTADOS LIMPIOS: Solo correo y teléfono
   const [contactEmail, setContactEmail] = useState("")
+  const [phoneNumber, setPhoneNumber] = useState("")
   
-  // CATÁLOGOS SAP/CRM BÁSICOS
   const unidadesNegocio = ["Adyuvantes", "Agrícola", "Exportación", "Industrial DJP", "Industrial PQ", "Polatecnia", "Agroindustriales", "DJP Smart Chemicals"]
   const tiposCliente = ["Agroindustrial", "Distribuidor", "Fabricante", "Representadas", "Representante", "Revendedor", "Subdistribuidor", "Agricultor", "Ganadero", "I&D", "Post Patent", "Formuladores Locales", "Smart Chemicals", "Polatecnia"]
   
-  // CATÁLOGOS SAP/CRM AVANZADOS
   const orgVentasOptions = ["POLAQUIMIA SA DE CV", "DR. JOSE POLAK", "POLATECNIA SA DE CV", "Compras", "Agrícola", "Contraloría", "Industrial", "Adyuvantes", "Marketing", "Exportaciones", "Nuevos productos", "Polatecnia"]
   const canalDistOptions = ["Agrícola", "Canal Dist. Común", "Industrial", "Ventas directas", "Ventas indirectas"]
   const divisionOptions = ["Exportación", "Nacional", "Sector Común", "Sector producto 01", "Servicios", "Trading"]
@@ -59,25 +58,58 @@ export function LinkGeneratorModal({ isOpen, onClose, onSessionCreated }: LinkGe
     if (isOpen) {
       setModalStep("form")
       setGeneratedSession(null)
-      setCompanyName("")
-      setRfc("")
       setContactEmail("")
+      setPhoneNumber("")
     }
   }, [isOpen])
 
   if (!isOpen) return null
 
-  const handleCreateSession = (e: React.FormEvent) => {
+  const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault()
     setModalStep("loading")
 
-    setTimeout(() => {
+    try {
       const highEntropyToken = `${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`
+      const rawSessionId = `SES-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
       const now = new Date()
       const expiresAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
 
+      // AHORA MANDAMOS RFC Y RAZÓN SOCIAL VACÍOS PARA QUE EL CLIENTE LOS LLENE
+      const initialAvance = {
+        empresa: { razonSocial: "", rfc: "", regimenFiscal: "", usoCFDI: "", giroComercial: "" },
+        direccionFiscal: { calle: "", numeroExterior: "", colonia: "", codigoPostal: "", estado: "", municipio: "" },
+        direccionesEntrega: [],
+        contacto: { nombreRepresentante: "", correoContacto: contactEmail, telefonoContacto: phoneNumber },
+        facturacion: { banco: "", cuenta4Digitos: "", metodoPago: "", formaPago: "", correoFacturas: "" }
+      }
+
+      const { error: sessionError } = await supabase
+        .from('sessions')
+        .insert([{
+          session_id: rawSessionId,
+          token: highEntropyToken,
+          workflow: workflow,
+          status: 'active',
+          config_comercial: commercialConfig,
+          ultimo_avance: initialAvance,
+          reactivaciones_count: 0,
+          expires_at: expiresAt.toISOString()
+        }])
+
+      if (sessionError) throw sessionError
+
+      await supabase
+        .from('audit_logs')
+        .insert([{
+          session_id: rawSessionId,
+          usuario: "SAC (Operador)",
+          accion: `Creación de Sesión (${workflow.toUpperCase()})`,
+          resultado: "Exitoso"
+        }])
+
       const newSession: MagicLinkSession = {
-        sessionId: `SES-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        sessionId: rawSessionId,
         workflow: workflow,
         token: highEntropyToken,
         clienteExisteEnCRM: false,
@@ -86,26 +118,26 @@ export function LinkGeneratorModal({ isOpen, onClose, onSessionCreated }: LinkGe
         fechaExpiracion: expiresAt.toLocaleDateString("es-MX"),
         reactivacionesCount: 0,
         status: "active",
-        ultimoAvance: {
-          empresa: { razonSocial: companyName, rfc, regimenFiscal: "", usoCFDI: "", giroComercial: "" },
-          direccionFiscal: { calle: "", numeroExterior: "", colonia: "", codigoPostal: "", estado: "", municipio: "" },
-          direccionesEntrega: [],
-          contacto: { nombreRepresentante: "", correoContacto: contactEmail, telefonoContacto: "" },
-          facturacion: { banco: "", cuenta4Digitos: "", metodoPago: "", formaPago: "", correoFacturas: "" }
-        },
+        ultimoAvance: initialAvance as any,
         documentosTemporales: {},
-        auditLogs: [{ id: `LOG-1`, fechaHora: new Date().toLocaleString("es-MX"), usuario: "SAC (Operador)", accion: `Creación de Sesión (${workflow.toUpperCase()})`, resultado: "Exitoso" }]
+        auditLogs: []
       }
 
       setGeneratedSession(newSession)
       onSessionCreated(newSession)
       setModalStep("success")
-    }, 1500)
+
+    } catch (error) {
+      console.error("Error al conectar con Supabase:", error)
+      alert("Hubo un problema al crear la sesión en la base de datos.")
+      setModalStep("form")
+    }
   }
 
   const handleCopy = () => {
     if (generatedSession) {
-      navigator.clipboard.writeText(`https://onboarding.grupopolak.com/registro/magic-link?token=${generatedSession.token}`)
+      const magicLinkUrl = `${window.location.origin}/registro/magic-link?token=${generatedSession.token}`
+      navigator.clipboard.writeText(magicLinkUrl)
       setCopiedCustom(true)
       setTimeout(() => setCopiedCustom(false), 2000)
     }
@@ -149,28 +181,25 @@ export function LinkGeneratorModal({ isOpen, onClose, onSessionCreated }: LinkGe
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                <div className="space-y-1.5 md:col-span-2">
-                  <Label>Razón Social *</Label>
-                  <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} required />
-                </div>
-                <div className="space-y-1.5 md:col-span-2">
-                  <Label>RFC *</Label>
-                  <Input value={rfc} onChange={(e) => setRfc(e.target.value.toUpperCase())} className="uppercase" required />
-                </div>
-                <div className="space-y-1.5 md:col-span-2">
+              {/* NUEVA CUADRÍCULA: Más limpia, sin Razón Social ni RFC */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1.5">
                   <Label>Correo de Contacto *</Label>
-                  <Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} required />
+                  <Input type="email" placeholder="ejemplo@empresa.com" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Teléfono de Contacto (Opcional)</Label>
+                  <Input type="tel" placeholder="Ej. 55 1234 5678" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
                 </div>
                 
-                <div className="space-y-1.5 md:col-span-1">
+                <div className="space-y-1.5">
                   <Label className="text-indigo-700 font-bold">Unidad Negocio *</Label>
                   <select className="flex h-9 w-full rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1 font-semibold" value={commercialConfig.unidadNegocio} onChange={(e) => updateConfig("unidadNegocio", e.target.value)}>
                     {unidadesNegocio.map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
                 </div>
 
-                <div className="space-y-1.5 md:col-span-1">
+                <div className="space-y-1.5">
                   <Label>Tipo de Cliente</Label>
                   <select className="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1" value={commercialConfig.tipoCliente} onChange={(e) => updateConfig("tipoCliente", e.target.value)}>
                     <option value="">Selecciona...</option>
@@ -189,7 +218,6 @@ export function LinkGeneratorModal({ isOpen, onClose, onSessionCreated }: LinkGe
                   </div>
 
                   <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-xs max-h-[40vh] overflow-y-auto">
-                    {/* Columna Izquierda */}
                     <div className="space-y-3">
                       <div className="space-y-1.5">
                         <Label>Organización de ventas</Label>
@@ -223,7 +251,6 @@ export function LinkGeneratorModal({ isOpen, onClose, onSessionCreated }: LinkGe
                       </div>
                     </div>
 
-                    {/* Columna Derecha */}
                     <div className="space-y-3">
                       <div className="space-y-1.5">
                         <Label>Canal de distribución</Label>
@@ -268,7 +295,7 @@ export function LinkGeneratorModal({ isOpen, onClose, onSessionCreated }: LinkGe
             </form>
           )}
 
-          {/* ... Estados de Carga y Éxito ... */}
+          {/* ... ESTADOS DE CARGA Y ÉXITO SE MANTIENEN IGUAL ... */}
           {modalStep === "loading" && (
             <div className="py-24 flex flex-col items-center justify-center space-y-4 animate-in fade-in">
               <div className="h-16 w-16 bg-indigo-50 rounded-full flex items-center justify-center">
@@ -276,7 +303,7 @@ export function LinkGeneratorModal({ isOpen, onClose, onSessionCreated }: LinkGe
               </div>
               <div className="text-center space-y-1">
                 <h3 className="text-lg font-bold text-slate-900">Procesando Sesión...</h3>
-                <p className="text-sm text-slate-500">Generando identificador y despachando correo.</p>
+                <p className="text-sm text-slate-500">Conectando con la base de datos y despachando correo.</p>
               </div>
             </div>
           )}
@@ -290,7 +317,7 @@ export function LinkGeneratorModal({ isOpen, onClose, onSessionCreated }: LinkGe
               <div className="text-center space-y-2">
                 <h3 className="text-2xl font-bold text-slate-900">¡Sesión Generada con Éxito!</h3>
                 <p className="text-sm text-slate-600 max-w-sm mx-auto">
-                  Se ha enviado automáticamente el enlace de registro al correo electrónico: <br/>
+                  Se ha guardado en la base de datos y enviado el enlace de registro a: <br/>
                   <strong className="text-slate-900 block mt-1">{contactEmail}</strong>
                 </p>
               </div>
@@ -306,7 +333,7 @@ export function LinkGeneratorModal({ isOpen, onClose, onSessionCreated }: LinkGe
                   En caso de que el cliente no reciba el correo, puedes copiar este enlace directo:
                 </p>
                 <div className="flex gap-2">
-                  <Input value={`https://onboarding.grupopolak.com/registro/magic-link?token=${generatedSession.token}`} readOnly className="bg-white font-mono text-[11px] text-slate-700 h-10" />
+                  <Input value={`${window.location.origin}/registro/magic-link?token=${generatedSession.token}`} readOnly className="bg-white font-mono text-[11px] text-slate-700 h-10" />
                   <Button onClick={handleCopy} className="bg-indigo-600 text-white hover:bg-indigo-700 gap-1.5 min-w-[120px] h-10 shadow-sm">
                     {copiedCustom ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                     {copiedCustom ? "¡Copiado!" : "Copiar Link"}
@@ -319,7 +346,6 @@ export function LinkGeneratorModal({ isOpen, onClose, onSessionCreated }: LinkGe
               </Button>
             </div>
           )}
-
         </CardContent>
       </Card>
     </div>

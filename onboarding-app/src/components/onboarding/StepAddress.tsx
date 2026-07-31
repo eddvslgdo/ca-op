@@ -1,136 +1,206 @@
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import type { AddressData, LegalContactData } from "@/types/onboarding"
-import { MapPin } from "lucide-react"
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { MapPin, Info } from "lucide-react";
 
+// Asegúrate de que las props coincidan con tus tipos
 interface StepAddressProps {
-  fiscalAddress: AddressData
-  contactData: LegalContactData
-  onFiscalChange: (data: Partial<AddressData>) => void
-  onContactChange: (data: Partial<LegalContactData>) => void
+  fiscalAddress: any;
+  onFiscalChange: (fields: any) => void;
+  contactData?: any;
+  onContactChange?: (fields: any) => void;
 }
 
 export function StepAddress({
   fiscalAddress,
-  contactData,
   onFiscalChange,
-  onContactChange,
 }: StepAddressProps) {
   return (
-    <div className="space-y-6 w-full text-left">
-      
-      {/* 1. SECCIÓN DOMICILIO FISCAL */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-900 border-b pb-2 flex items-center gap-1.5">
-          <MapPin className="h-4 w-4 text-indigo-600" /> Domicilio Fiscal (Registrado ante el SAT)
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-          <div className="space-y-1 col-span-2">
-            <Label htmlFor="calleF">Calle *</Label>
-            <Input
-              id="calleF"
-              placeholder="Ej. Av. Insurgentes Sur"
-              value={fiscalAddress.calle}
-              onChange={(e) => onFiscalChange({ calle: e.target.value })}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label htmlFor="numExtF">Num. Ext *</Label>
-              <Input
-                id="numExtF"
-                placeholder="123"
-                value={fiscalAddress.numeroExterior}
-                onChange={(e) => onFiscalChange({ numeroExterior: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="numIntF">Num. Int</Label>
-              <Input
-                id="numIntF"
-                placeholder="Piso 4"
-                value={fiscalAddress.numeroInterior || ""}
-                onChange={(e) => onFiscalChange({ numeroInterior: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="cpF">Código Postal *</Label>
-            <Input
-              id="cpF"
-              placeholder="03100"
-              maxLength={5}
-              value={fiscalAddress.codigoPostal}
-              onChange={(e) => onFiscalChange({ codigoPostal: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="coloniaF">Colonia *</Label>
-            <Input
-              id="coloniaF"
-              placeholder="Ej. Del Valle"
-              value={fiscalAddress.colonia}
-              onChange={(e) => onFiscalChange({ colonia: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="municipioF">Alcaldía / Municipio *</Label>
-            <Input
-              id="municipioF"
-              placeholder="Ej. Benito Juárez"
-              value={fiscalAddress.municipio}
-              onChange={(e) => onFiscalChange({ municipio: e.target.value })}
-            />
-          </div>
+    <div className="space-y-6">
+      <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+        <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-md">
+          <MapPin className="h-6 w-6" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">
+            Datos del Domicilio Registrado
+          </h2>
+          <p className="text-sm text-slate-500">
+            Copia esta información exactamente como aparece en tu Constancia de
+            Situación Fiscal.
+          </p>
         </div>
       </div>
 
-      {/* 2. SECCIÓN CONTACTO LEGAL */}
-      <div className="space-y-4 pt-2">
-        <h3 className="text-sm font-semibold text-slate-900 border-b pb-2">
-          Representante Legal / Contacto Principal
-        </h3>
+      <div className="bg-amber-50 border border-amber-200 p-3 rounded-md flex gap-2 items-start text-amber-800 text-xs mb-4">
+        <Info className="h-4 w-4 shrink-0 mt-0.5" />
+        <p>
+          Para evitar errores de facturación 4.0, no abrevies palabras si no
+          están abreviadas en tu documento del SAT.
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-          <div className="space-y-1 col-span-3">
-            <Label htmlFor="nombreRep">Nombre Completo del Representante Legal *</Label>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 bg-slate-50/50 p-4 rounded-lg border border-slate-100">
+        {/* Fila 1 */}
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Código Postal <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            placeholder="Ej. 04120"
+            maxLength={5}
+            value={fiscalAddress.codigoPostal}
+            onChange={(e) => onFiscalChange({ codigoPostal: e.target.value })}
+            className="h-10 bg-white font-mono"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Tipo de Vialidad <span className="text-red-500">*</span>
+          </Label>
+          <select
+            className="flex h-10 w-full rounded-md border border-slate-300 px-3 bg-white text-sm focus:ring-indigo-600"
+            value={fiscalAddress.tipoVialidad}
+            onChange={(e) => onFiscalChange({ tipoVialidad: e.target.value })}
+          >
+            <option value="">Selecciona...</option>
+            <option value="AVENIDA">AVENIDA (AV.)</option>
+            <option value="CALLE">CALLE (C.)</option>
+            <option value="CALLEJON">CALLEJON (CJON.)</option>
+            <option value="CALZADA">CALZADA (CALZ.)</option>
+            <option value="CARRETERA">CARRETERA (CARR.)</option>
+            <option value="BOULEVARD">BOULEVARD (BLVD.)</option>
+            <option value="PRIVADA">PRIVADA (PRIV.)</option>
+            <option value="CAMINO">CAMINO</option>
+          </select>
+        </div>
+
+        {/* Fila 2 */}
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Nombre de Vialidad <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            placeholder="Ej. DEL CONVENTO"
+            value={fiscalAddress.calle}
+            onChange={(e) =>
+              onFiscalChange({ calle: e.target.value.toUpperCase() })
+            }
+            className="h-10 bg-white uppercase"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Núm. Exterior <span className="text-red-500">*</span>
+            </Label>
             <Input
-              id="nombreRep"
-              placeholder="Ej. Roberto Gómez Bolaños"
-              value={contactData.nombreRepresentante}
-              onChange={(e) => onContactChange({ nombreRepresentante: e.target.value })}
+              placeholder="Ej. 24"
+              value={fiscalAddress.numeroExterior}
+              onChange={(e) =>
+                onFiscalChange({ numeroExterior: e.target.value })
+              }
+              className="h-10 bg-white"
             />
           </div>
-
-          <div className="space-y-1 col-span-2">
-            <Label htmlFor="correo">Correo Electrónico *</Label>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Núm. Interior
+            </Label>
             <Input
-              id="correo"
-              type="email"
-              placeholder="contacto@empresa.com"
-              value={contactData.correoContacto}
-              onChange={(e) => onContactChange({ correoContacto: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="telefono">Teléfono *</Label>
-            <Input
-              id="telefono"
-              type="tel"
-              placeholder="55 1234 5678"
-              value={contactData.telefonoContacto}
-              onChange={(e) => onContactChange({ telefonoContacto: e.target.value })}
+              placeholder="Opcional"
+              value={fiscalAddress.numeroInterior}
+              onChange={(e) =>
+                onFiscalChange({ numeroInterior: e.target.value })
+              }
+              className="h-10 bg-white"
             />
           </div>
         </div>
-      </div>
 
+        {/* Fila 3 */}
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Nombre de la Colonia <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            placeholder="Ej. CHURUBUSCO"
+            value={fiscalAddress.colonia}
+            onChange={(e) =>
+              onFiscalChange({ colonia: e.target.value.toUpperCase() })
+            }
+            className="h-10 bg-white uppercase"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Nombre de la Localidad
+          </Label>
+          <Input
+            placeholder="Opcional"
+            value={fiscalAddress.localidad}
+            onChange={(e) =>
+              onFiscalChange({ localidad: e.target.value.toUpperCase() })
+            }
+            className="h-10 bg-white uppercase"
+          />
+        </div>
+
+        {/* Fila 4 */}
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Municipio o Demarcación <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            placeholder="Ej. COYOACAN"
+            value={fiscalAddress.municipio}
+            onChange={(e) =>
+              onFiscalChange({ municipio: e.target.value.toUpperCase() })
+            }
+            className="h-10 bg-white uppercase"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Entidad Federativa <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            placeholder="Ej. CIUDAD DE MEXICO"
+            value={fiscalAddress.estado}
+            onChange={(e) =>
+              onFiscalChange({ estado: e.target.value.toUpperCase() })
+            }
+            className="h-10 bg-white uppercase"
+          />
+        </div>
+
+        {/* Fila 5 - Referencias */}
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Entre Calle
+          </Label>
+          <Input
+            placeholder="Ej. CALLE HEROES DE 47"
+            value={fiscalAddress.entreCalle}
+            onChange={(e) =>
+              onFiscalChange({ entreCalle: e.target.value.toUpperCase() })
+            }
+            className="h-10 bg-white uppercase"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Y Calle
+          </Label>
+          <Input
+            placeholder="Ej. CALLE 20 DE AGOSTO"
+            value={fiscalAddress.yCalle}
+            onChange={(e) =>
+              onFiscalChange({ yCalle: e.target.value.toUpperCase() })
+            }
+            className="h-10 bg-white uppercase"
+          />
+        </div>
+      </div>
     </div>
-  )
+  );
 }
