@@ -1,6 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MapPin, Info } from "lucide-react";
+import { MapPin, Info, MapPinned } from "lucide-react";
 
 // Asegúrate de que las props coincidan con tus tipos
 interface StepAddressProps {
@@ -199,6 +199,33 @@ export function StepAddress({
             }
             className="h-10 bg-white uppercase"
           />
+        </div>
+      </div>
+
+      {/* NUEVA SECCIÓN DE GEOLOCALIZACIÓN */}
+      <div className="border border-slate-200 rounded-lg overflow-hidden mt-4">
+        <div className="bg-slate-50 p-4 border-b border-slate-200">
+          <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-1.5">
+            <MapPinned className="h-4 w-4 text-indigo-600" /> Ubicación Exacta
+            (Coordenadas)
+          </h4>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Ayúdanos a fijar el pin en el mapa para evitar errores en nuestras
+            referencias de entrega y facturación.
+          </p>
+        </div>
+        <div className="h-48 bg-slate-100 flex items-center justify-center relative">
+          {/* SIMULADOR DE MAPA */}
+          <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" />
+          <div className="text-center z-10 flex flex-col items-center gap-3">
+            <MapPinned className="h-10 w-10 text-indigo-400 animate-bounce" />
+            <button
+              type="button"
+              className="bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 font-semibold text-xs px-4 py-2 rounded-md shadow-sm transition-colors flex items-center gap-2"
+            >
+              <MapPin className="h-3.5 w-3.5" /> Marcar dirección fiscal
+            </button>
+          </div>
         </div>
       </div>
     </div>

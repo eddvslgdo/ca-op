@@ -28,7 +28,10 @@ import { StepCompany } from "@/components/onboarding/StepCompany";
 import { StepAddress } from "@/components/onboarding/StepAddress";
 import { StepDelivery } from "@/components/onboarding/StepDelivery";
 import { StepBilling } from "@/components/onboarding/StepBilling";
-import { StepDocuments } from "@/components/onboarding/StepDocuments";
+import {
+  StepDocuments,
+  type StepDocumentsData,
+} from "@/components/onboarding/StepDocuments";
 import { StepSummary } from "@/components/onboarding/StepSummary";
 import type { OnboardingFormValues, BillingData } from "@/types/onboarding";
 import { supabase } from "@/lib/supabase";
@@ -39,7 +42,7 @@ export function OnboardingPortal() {
 
   // Estados de carga y validación
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false); // NUEVO: Estado para el autoguardado visual
+  const [isSaving, setIsSaving] = useState(false);
   const [invalidToken, setInvalidToken] = useState(false);
   const [workflow, setWorkflow] = useState<"lead" | "onboarding">("lead");
   const [dbSessionId, setDbSessionId] = useState("");
@@ -47,12 +50,20 @@ export function OnboardingPortal() {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
+  // NUEVOS ESTADOS: Casilla legal y Archivos PDF
+  const [isAgreed, setIsAgreed] = useState(false);
+  const [documentFiles, setDocumentFiles] = useState<StepDocumentsData>({
+    csf: null,
+    comprobante: null,
+    ine: null,
+  });
+
   const [formData, setFormData] = useState<OnboardingFormValues>({
-    empresa: { razonSocial: "", rfc: "", regimenFiscal: "", usoCFDI: "" }, // <-- Eliminado giroComercial
+    empresa: { razonSocial: "", rfc: "", regimenFiscal: "", usoCFDI: "" },
     direccionFiscal: {
       codigoPostal: "",
       tipoVialidad: "",
-      calle: "", // Nombre de Vialidad
+      calle: "",
       numeroExterior: "",
       numeroInterior: "",
       colonia: "",
@@ -151,9 +162,37 @@ export function OnboardingPortal() {
       facturacion: { ...prev.facturacion, ...fields },
     }));
 
-  // FUNCIÓN PARA AUTOGUARDADO EN SUPABASE
+  // SUBIDA DE ARCHIVOS A SUPABASE STORAGE
+  const uploadDocumentsToStorage = async (): Promise<
+    Record<string, string>
+  > => {
+    const uploadedUrls: Record<string, string> = {};
+
+    for (const [key, file] of Object.entries(documentFiles)) {
+      if (file) {
+        const filePath = `${dbSessionId}/${key}_${Date.now()}.pdf`;
+        const { error: uploadError } = await supabase.storage
+          .from("onboarding-documents")
+          .upload(filePath, file, { upsert: true });
+
+        if (!uploadError) {
+          const { data: publicUrlData } = supabase.storage
+            .from("onboarding-documents")
+            .getPublicUrl(filePath);
+
+          uploadedUrls[key] = publicUrlData.publicUrl;
+        } else {
+          console.error(`Error al subir ${key}:`, uploadError);
+        }
+      }
+    }
+
+    return uploadedUrls;
+  };
+
+  // FUNCIÓN PARA AUTOGUARDADO Y AVANCE DE PASO
   const handleNext = async () => {
-    // Validar teléfono obligatorio antes de avanzar (Asumiendo que el paso 1 tiene el teléfono de contacto o representante)
+    // Validaciones de teléfono
     if (workflow === "lead" && currentStep === 1) {
       if (
         !formData.contacto.telefonoContacto ||
@@ -162,10 +201,9 @@ export function OnboardingPortal() {
         alert(
           "El número de teléfono es obligatorio para completar el registro.",
         );
-        return; // Detiene el avance
+        return;
       }
     } else if (workflow === "onboarding" && currentStep === 2) {
-      // Si en tu diseño el teléfono está en el paso 2 (StepAddress)
       if (
         !formData.contacto.telefonoContacto ||
         formData.contacto.telefonoContacto.trim() === ""
@@ -178,30 +216,49 @@ export function OnboardingPortal() {
     setIsSaving(true);
     try {
       if (currentStep < totalSteps) {
-        // Auto-guardado en la nube
+        // Auto-guardado de progreso en Supabase
         await supabase
           .from("sessions")
           .update({ ultimo_avance: formData })
           .eq("session_id", dbSessionId);
+
         setCurrentStep((prev) => prev + 1);
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
-        // Guardado final
+        // PASO FINAL: Subir PDFs a Storage y cerrar la sesión
+        const uploadedDocUrls = await uploadDocumentsToStorage();
+
+        const finalFormData = {
+          ...formData,
+          documentosTemporales: uploadedDocUrls,
+        };
+
         await supabase
           .from("sessions")
           .update({
-            ultimo_avance: formData,
+            ultimo_avance: finalFormData,
             status: "completed_by_client",
           })
           .eq("session_id", dbSessionId);
+
+        // Registrar log de auditoría
+        await supabase.from("audit_logs").insert([
+          {
+            session_id: dbSessionId,
+            usuario: "Cliente (Portal)",
+            accion: "Finalización de Captura y Carga de Expediente",
+            resultado: "Exitoso",
+          },
+        ]);
 
         setIsSubmitted(true);
       }
     } catch (error) {
       console.error("Error al guardar:", error);
-      alert("Hubo un problema guardando tu progreso, pero puedes continuar.");
+      alert(
+        "Hubo un problema guardando tu progreso. Por favor intenta nuevamente.",
+      );
     } finally {
-      // Pequeño timeout para que el usuario alcance a ver el letrero de "Guardado"
       setTimeout(() => setIsSaving(false), 500);
     }
   };
@@ -392,8 +449,19 @@ export function OnboardingPortal() {
                         onChange={updateBillingData}
                       />
                     )}
-                    {currentStep === 5 && <StepDocuments />}
-                    {currentStep === 6 && <StepSummary formData={formData} />}
+                    {currentStep === 5 && (
+                      <StepDocuments
+                        documents={documentFiles}
+                        onDocumentsChange={setDocumentFiles}
+                      />
+                    )}
+                    {currentStep === 6 && (
+                      <StepSummary
+                        formData={formData}
+                        isAgreed={isAgreed}
+                        onAgreeChange={setIsAgreed}
+                      />
+                    )}
                   </>
                 )}
               </CardContent>
@@ -410,8 +478,13 @@ export function OnboardingPortal() {
 
                 <Button
                   onClick={handleNext}
-                  disabled={isSaving}
-                  className="gap-2 h-11 px-6 font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-all"
+                  disabled={
+                    isSaving ||
+                    (currentStep === totalSteps &&
+                      workflow === "onboarding" &&
+                      !isAgreed)
+                  }
+                  className="gap-2 h-11 px-6 font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSaving ? (
                     <>

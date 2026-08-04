@@ -1,49 +1,59 @@
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { FileUp, FileText, CheckCircle2, Trash2 } from "lucide-react"
+import { FileUp, FileText, CheckCircle2, Trash2, ShieldAlert } from "lucide-react"
 
-export function StepDocuments() {
-  // Simulamos que la CSF ya viene cargada del Paso 1
-  const [uploadedDocs, setUploadedDocs] = useState<Record<string, string>>({
-    csf: "Constancia_Situacion_Fiscal_OCR.pdf" 
-  })
+export interface StepDocumentsData {
+  csf: File | null;
+  comprobante: File | null;
+  ine: File | null;
+}
 
-  // Función para simular que subimos un archivo
-  const handleFileUpload = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+interface StepDocumentsProps {
+  documents?: StepDocumentsData; // Hacemos la prop opcional por si acaso
+  onDocumentsChange: (docs: StepDocumentsData) => void;
+}
+
+export function StepDocuments({ 
+  // Le damos un valor por defecto para evitar el error "undefined"
+  documents = { csf: null, comprobante: null, ine: null }, 
+  onDocumentsChange 
+}: StepDocumentsProps) {
+
+  const handleFileUpload = (id: keyof StepDocumentsData, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      setUploadedDocs((prev) => ({ ...prev, [id]: file.name }))
+    if (!file) return;
+
+    if (file.type !== "application/pdf") {
+      alert("Por favor, sube únicamente archivos en formato PDF.");
+      e.target.value = ""; 
+      return;
     }
+
+    onDocumentsChange({ ...documents, [id]: file })
   }
 
-  // Función para simular que borramos un archivo
-  const removeDoc = (id: string) => {
-    setUploadedDocs((prev) => {
-      const newDocs = { ...prev }
-      delete newDocs[id]
-      return newDocs
-    })
+  const removeDoc = (id: keyof StepDocumentsData) => {
+    onDocumentsChange({ ...documents, [id]: null })
   }
 
-  const requiredDocuments = [
-    { id: "csf", title: "Constancia de Situación Fiscal", desc: "Actualizada al mes en curso." },
-    { id: "acta", title: "Acta Constitutiva", desc: "Documento completo con sellos del RPPC." },
-    { id: "poder", title: "Poder Notarial", desc: "Facultades del representante legal (si aplica)." },
-    { id: "comprobante", title: "Comprobante de Domicilio", desc: "Luz, agua o telefonía (No mayor a 3 meses)." },
-    { id: "ine", title: "Identificación Oficial", desc: "INE o Pasaporte vigente del representante." },
+  const requiredDocuments: Array<{ id: keyof StepDocumentsData; title: string; desc: string }> = [
+    { id: "csf", title: "Constancia de Situación Fiscal", desc: "Actualizada al mes en curso (PDF)." },
+    { id: "comprobante", title: "Comprobante de Domicilio", desc: "Luz, agua o telefonía no mayor a 3 meses (PDF)." },
+    { id: "ine", title: "Identificación Oficial", desc: "INE o Pasaporte vigente del representante (PDF)." },
   ]
 
   return (
-    <div className="space-y-4 w-full">
-      <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-4 mb-6">
-        <p className="text-sm text-blue-800 font-medium">
-          Sube los documentos en formato PDF o JPG (Máximo 5MB por archivo).
+    <div className="space-y-4 w-full animate-in fade-in">
+      <div className="bg-amber-50 border border-amber-200 p-3 rounded-md flex gap-2 items-start text-amber-800 text-xs mb-6">
+        <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+        <p>
+          Toda la documentación es manejada de forma confidencial para tu alta comercial. <strong>Por seguridad, solo se admiten archivos en formato PDF.</strong>
         </p>
       </div>
 
       <div className="space-y-3">
         {requiredDocuments.map((doc) => {
-          const isUploaded = !!uploadedDocs[doc.id]
+          const file = documents[doc.id]
+          const isUploaded = !!file
 
           return (
             <div 
@@ -60,8 +70,8 @@ export function StepDocuments() {
                   <h4 className={`text-sm font-semibold ${isUploaded ? "text-emerald-900" : "text-slate-900"}`}>
                     {doc.title}
                   </h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {isUploaded ? uploadedDocs[doc.id] : doc.desc}
+                  <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">
+                    {isUploaded ? file.name : doc.desc}
                   </p>
                 </div>
               </div>
@@ -79,11 +89,11 @@ export function StepDocuments() {
                 ) : (
                   <div className="relative">
                     <Button variant="outline" size="sm" className="gap-2 text-xs">
-                      <FileUp className="h-3.5 w-3.5" /> Subir
+                      <FileUp className="h-3.5 w-3.5" /> Subir PDF
                     </Button>
                     <input
                       type="file"
-                      accept=".pdf,.png,.jpg,.jpeg"
+                      accept=".pdf"
                       onChange={(e) => handleFileUpload(doc.id, e)}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
