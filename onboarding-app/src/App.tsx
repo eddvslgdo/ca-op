@@ -1,106 +1,202 @@
-import { useState, useEffect } from "react"
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
-import { OnboardingPortal } from "@/pages/OnboardingPortal"
-import { SacWorkspace } from "@/pages/SacWorkspace"
-import { CreateSessionPage } from "@/pages/CreateSessionPage"
-import type { MagicLinkSession } from "@/types/onboarding"
-import { supabase } from "@/lib/supabase"
+import { useState, useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { OnboardingPortal } from "@/pages/OnboardingPortal";
+import { SacWorkspace } from "@/pages/SacWorkspace";
+import { CreateSessionPage } from "@/pages/CreateSessionPage";
+import type { MagicLinkSession } from "@/types/onboarding";
+import { supabase } from "@/lib/supabase";
 
 // ------------------------------------------------------------------
 // 1. COMPONENTE DEL DASHBOARD DE SAC
 // ------------------------------------------------------------------
 function SacDashboard() {
-  const [sessions, setSessions] = useState<MagicLinkSession[]>([])
+  const [sessions, setSessions] = useState<MagicLinkSession[]>([]);
 
   useEffect(() => {
     // 1. Carga inicial
-    fetchSessions()
+    fetchSessions();
 
     // 2. MAGIA DE TIEMPO REAL (Supabase Realtime)
     // Escucha cualquier cambio (Insert, Update, Delete) en la tabla 'sessions'
     const subscription = supabase
-      .channel('public:sessions')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, (payload) => {
-        console.log('Cambio detectado desde Supabase:', payload)
-        fetchSessions() // Recarga los datos automáticamente en segundo plano
-      })
-      .subscribe()
+      .channel("public:sessions")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sessions" },
+        (payload) => {
+          console.log("Cambio detectado desde Supabase:", payload);
+          fetchSessions(); // Recarga los datos automáticamente en segundo plano
+        },
+      )
+      .subscribe();
 
     // 3. Limpieza de la suscripción al desmontar
     return () => {
-      supabase.removeChannel(subscription)
-    }
-  }, [])
+      supabase.removeChannel(subscription);
+    };
+  }, []);
 
   const fetchSessions = async () => {
     try {
-      const { data, error } = await supabase
-        .from('sessions')
-        .select('*')
-        .order('created_at', { ascending: false })
+      // 1. Descargamos las sesiones
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from("sessions")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-      if (error) throw error
+      // 2. Descargamos TODA la bitácora de auditoría
+      const { data: auditData, error: auditError } = await supabase
+        .from("audit_logs")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-      if (data) {
-        const sesionesRecuperadas = data.map((row: any) => ({
-          sessionId: row.session_id,
-          workflow: row.workflow,
-          token: row.token,
-          crmProspectId: row.crm_prospect_id,
-          clienteExisteEnCRM: !!row.crm_prospect_id,
-          configComercial: row.config_comercial,
-          fechaCreacion: new Date(row.created_at).toLocaleDateString("es-MX"),
-          fechaExpiracion: new Date(row.expires_at).toLocaleDateString("es-MX"),
-          reactivacionesCount: row.reactivaciones_count,
-          status: row.status,
-          ultimoAvance: row.ultimo_avance,
-          documentosTemporales: {},
-          auditLogs: [] 
-        }))
-        setSessions(sesionesRecuperadas)
+      if (sessionsError) throw sessionsError;
+      if (auditError) throw auditError;
+
+      if (sessionsData) {
+        const sesionesRecuperadas = sessionsData.map((row: any) => {
+          // 3. Filtramos los logs que le pertenecen EXCLUSIVAMENTE a esta sesión
+          const logsDeSesion = auditData
+            ? auditData
+                .filter((log: any) => log.session_id === row.session_id)
+                .map((log: any) => ({
+                  id: log.id,
+                  fechaHora: new Date(log.created_at).toLocaleString("es-MX", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  }),
+                  usuario: log.usuario,
+                  accion: log.accion,
+                  resultado: log.resultado,
+                }))
+            : [];
+
+          return {
+            sessionId: row.session_id,
+            workflow: row.workflow,
+            token: row.token,
+            crmProspectId: row.crm_prospect_id,
+            clienteExisteEnCRM: !!row.crm_prospect_id,
+            configComercial: row.config_comercial,
+            fechaCreacion: new Date(row.created_at).toLocaleDateString("es-MX"),
+            fechaExpiracion: new Date(row.expires_at).toLocaleDateString(
+              "es-MX",
+            ),
+            reactivacionesCount: row.reactivaciones_count,
+            status: row.status,
+            ultimoAvance: row.ultimo_avance,
+            documentosTemporales: {},
+            auditLogs: logsDeSesion, // <--- ¡AQUÍ ESTÁ LA MAGIA! Ya no está vacío.
+          };
+        });
+        setSessions(sesionesRecuperadas);
       }
     } catch (error) {
-      console.error("Error al cargar las sesiones desde Supabase:", error)
+      console.error(
+        "Error al cargar las sesiones y auditoría desde Supabase:",
+        error,
+      );
     }
-  }
+  };
 
   const handleSyncSessionToCRM = async (sessionId: string) => {
-    const fakeCrmId = `CRM-${Math.floor(Math.random() * 10000) + 10000}`
+    const fakeCrmId = `CRM-${Math.floor(Math.random() * 10000) + 10000}`;
     try {
-      await supabase.from('sessions').update({ crm_prospect_id: fakeCrmId }).eq('session_id', sessionId)
-      await supabase.from('audit_logs').insert([{ session_id: sessionId, usuario: "Sistema", accion: "Sincronización inicial con CRM", resultado: "ID Asignado" }])
-      fetchSessions()
-    } catch (error) { console.error(error) }
-  }
+      await supabase
+        .from("sessions")
+        .update({ crm_prospect_id: fakeCrmId })
+        .eq("session_id", sessionId);
+      await supabase
+        .from("audit_logs")
+        .insert([
+          {
+            session_id: sessionId,
+            usuario: "Sistema",
+            accion: "Sincronización inicial con CRM",
+            resultado: "ID Asignado",
+          },
+        ]);
+      fetchSessions();
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const handlePromoteToOnboarding = async (sessionId: string) => {
-    const sessionActual = sessions.find(s => s.sessionId === sessionId)
-    if (!sessionActual) return
-    const newExp = new Date(new Date().getTime() + 3 * 24 * 60 * 60 * 1000)
+    const sessionActual = sessions.find((s) => s.sessionId === sessionId);
+    if (!sessionActual) return;
+    const newExp = new Date(new Date().getTime() + 3 * 24 * 60 * 60 * 1000);
     try {
-      await supabase.from('sessions').update({ workflow: 'onboarding', status: 'active', expires_at: newExp.toISOString(), reactivaciones_count: sessionActual.reactivacionesCount + 1 }).eq('session_id', sessionId)
-      await supabase.from('audit_logs').insert([{ session_id: sessionId, usuario: "SAC", accion: "Promoción a ONBOARDING", resultado: "Exitoso" }])
-      fetchSessions()
-    } catch (error) { console.error(error) }
-  }
+      await supabase
+        .from("sessions")
+        .update({
+          workflow: "onboarding",
+          status: "active",
+          expires_at: newExp.toISOString(),
+          reactivaciones_count: sessionActual.reactivacionesCount + 1,
+        })
+        .eq("session_id", sessionId);
+      await supabase
+        .from("audit_logs")
+        .insert([
+          {
+            session_id: sessionId,
+            usuario: "SAC",
+            accion: "Promoción a ONBOARDING",
+            resultado: "Exitoso",
+          },
+        ]);
+      fetchSessions();
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const handleApproveSession = async (sessionId: string) => {
     try {
-      await supabase.from('sessions').update({ status: 'approved' }).eq('session_id', sessionId)
-      await supabase.from('audit_logs').insert([{ session_id: sessionId, usuario: "SAC (Revisor)", accion: "Aprobación y Enriquecimiento CRM", resultado: "Enviado" }])
-      fetchSessions()
-    } catch (error) { console.error(error) }
-  }
+      await supabase
+        .from("sessions")
+        .update({ status: "approved" })
+        .eq("session_id", sessionId);
+      await supabase
+        .from("audit_logs")
+        .insert([
+          {
+            session_id: sessionId,
+            usuario: "SAC (Revisor)",
+            accion: "Aprobación y Enriquecimiento CRM",
+            resultado: "Enviado",
+          },
+        ]);
+      fetchSessions();
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   // Agregada la función para Reactivar Enlaces Vencidos
   const handleReactivateSession = async (sessionId: string) => {
-    const newExp = new Date(new Date().getTime() + 3 * 24 * 60 * 60 * 1000)
+    const newExp = new Date(new Date().getTime() + 3 * 24 * 60 * 60 * 1000);
     try {
-      await supabase.from('sessions').update({ status: 'active', expires_at: newExp.toISOString() }).eq('session_id', sessionId)
-      await supabase.from('audit_logs').insert([{ session_id: sessionId, usuario: "SAC", accion: "Reactivación / Extensión de Link", resultado: "+3 Días" }])
-      fetchSessions()
-    } catch (error) { console.error(error) }
-  }
+      await supabase
+        .from("sessions")
+        .update({ status: "active", expires_at: newExp.toISOString() })
+        .eq("session_id", sessionId);
+      await supabase
+        .from("audit_logs")
+        .insert([
+          {
+            session_id: sessionId,
+            usuario: "SAC",
+            accion: "Reactivación / Extensión de Link",
+            resultado: "+3 Días",
+          },
+        ]);
+      fetchSessions();
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -110,17 +206,17 @@ function SacDashboard() {
           Workspace SAC - Control de Accesos
         </span>
       </nav>
-      <SacWorkspace 
+      <SacWorkspace
         sessions={sessions}
         onSessionCreated={() => fetchSessions()}
         onPromoteToOnboarding={handlePromoteToOnboarding}
         onSyncSessionToCRM={handleSyncSessionToCRM}
         onApproveSession={handleApproveSession}
-        onReactivateSession={handleReactivateSession} 
+        onReactivateSession={handleReactivateSession}
         onRefresh={fetchSessions} // Vinculamos el botón de actualización manual
       />
     </div>
-  )
+  );
 }
 
 // ------------------------------------------------------------------
@@ -136,5 +232,5 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }
