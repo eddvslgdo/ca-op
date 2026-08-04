@@ -33,12 +33,13 @@ import {
   XCircle,
   Eye,
   RefreshCw,
+  Clock,
 } from "lucide-react";
 import type { MagicLinkSession } from "@/types/onboarding";
 
 interface SacWorkspaceProps {
   sessions: MagicLinkSession[];
-  onSessionCreated: (session: MagicLinkSession) => void;
+  onSessionCreated?: (session: MagicLinkSession) => void;
   onPromoteToOnboarding: (sessionId: string) => void;
   onSyncSessionToCRM: (sessionId: string) => void;
   onApproveSession: (sessionId: string) => void;
@@ -48,26 +49,27 @@ interface SacWorkspaceProps {
     sections: string[],
     message: string,
   ) => void;
+  onRefresh?: () => void;
 }
 
 type AlertActionType = "sync" | "promote" | "approve" | "correct" | null;
 
 export function SacWorkspace({
   sessions,
-  onSessionCreated,
   onPromoteToOnboarding,
   onSyncSessionToCRM,
   onApproveSession,
   onReactivateSession,
   onRequestCorrections = () => console.log("Correcciones solicitadas"),
+  onRefresh,
 }: SacWorkspaceProps) {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<"sessions" | "audit">("sessions");
-
   const [selectedSession, setSelectedSession] =
     useState<MagicLinkSession | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [activeAlert, setActiveAlert] = useState<{
     type: AlertActionType;
@@ -84,10 +86,18 @@ export function SacWorkspace({
 
   const handleCopy = (token: string) => {
     navigator.clipboard.writeText(
-      `https://onboarding.grupopolak.com/registro/magic-link?token=${token}`,
+      `${window.location.origin}/registro/magic-link?token=${token}`,
     );
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleManualRefresh = async () => {
+    if (onRefresh) {
+      setIsRefreshing(true);
+      await onRefresh();
+      setTimeout(() => setIsRefreshing(false), 800);
+    }
   };
 
   const handleSafeSyncToCRM = (sessionId: string) =>
@@ -101,7 +111,6 @@ export function SacWorkspace({
   };
   const handleSafeApproveSession = (sessionId: string) =>
     setActiveAlert({ type: "approve", sessionId });
-
   const handleSafeRequestCorrections = (sessionId: string) => {
     setCorrectionSections([]);
     setCorrectionMessage("");
@@ -164,13 +173,25 @@ export function SacWorkspace({
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs">
+          {onRefresh && (
+            <Button
+              variant="outline"
+              onClick={handleManualRefresh}
+              className="bg-slate-800 border-slate-700 hover:bg-slate-700 hover:text-white text-slate-300 gap-2 h-9 text-xs"
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-indigo-400" : ""}`}
+              />
+              {isRefreshing ? "Actualizando..." : "Sincronizar"}
+            </Button>
+          )}
           <Button
             onClick={() => navigate("/sac/nueva-sesion")}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 text-xs"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 text-xs h-9"
           >
             <Link2 className="h-4 w-4" /> Crear Nueva Sesión
           </Button>
-          <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-md border border-slate-700">
+          <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 h-9 rounded-md border border-slate-700">
             <User className="h-3.5 w-3.5 text-indigo-400" />
             <span className="font-medium text-slate-200">
               SAC: Eduardo Velázquez
@@ -244,21 +265,67 @@ export function SacWorkspace({
                           : "No Definida"}
                       </Badge>
                     </TableCell>
+
                     <TableCell>
                       <div className="flex flex-col gap-1.5 items-start">
-                        {sess.workflow === "lead" ? (
+                        {/* 1. TIPO DE FLUJO (Oculto en Onboarding para limpiar la vista) */}
+                        {sess.workflow === "lead" && (
                           <Badge
                             variant="secondary"
-                            className="text-[10px] bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            className="text-[10px] bg-slate-100 text-slate-600 hover:bg-slate-200 mb-1"
                           >
                             Prospecto (Lead)
                           </Badge>
-                        ) : (
-                          <Badge className="text-[10px] bg-indigo-100 text-indigo-800 border-indigo-200 hover:bg-indigo-200">
-                            Onboarding Completo
+                        )}
+
+                        {/* 2. SEMÁFORO DEL TURNO */}
+                        {sess.status === "active" && (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] h-4 px-1.5 bg-slate-50 text-slate-500 border-slate-200"
+                          >
+                            <Clock className="h-2.5 w-2.5 mr-1" /> Esperando al
+                            Cliente
+                          </Badge>
+                        )}
+                        {sess.status === "completed_by_client" && (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] h-4 px-1.5 bg-blue-50 text-blue-700 border-blue-200"
+                          >
+                            <ShieldCheck className="h-2.5 w-2.5 mr-1 animate-pulse" />{" "}
+                            Por Validar (SAC)
+                          </Badge>
+                        )}
+                        {sess.status === "corrections_requested" && (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] h-4 px-1.5 bg-orange-50 text-orange-700 border-orange-200"
+                          >
+                            <AlertTriangle className="h-2.5 w-2.5 mr-1" /> En
+                            Corrección
+                          </Badge>
+                        )}
+                        {sess.status === "approved" && (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] h-4 px-1.5 bg-emerald-50 text-emerald-700 border-emerald-200"
+                          >
+                            <Check className="h-2.5 w-2.5 mr-1" /> Expediente
+                            Cerrado
+                          </Badge>
+                        )}
+                        {sess.status === "expired" && (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] h-4 px-1.5 bg-red-50 text-red-700 border-red-200"
+                          >
+                            <XCircle className="h-2.5 w-2.5 mr-1" /> Enlace
+                            Vencido
                           </Badge>
                         )}
 
+                        {/* 3. ESTADO CRM */}
                         {sess.crmProspectId ? (
                           <Badge
                             variant="outline"
@@ -277,6 +344,7 @@ export function SacWorkspace({
                         )}
                       </div>
                     </TableCell>
+
                     <TableCell className="text-right space-x-2 flex justify-end items-center h-full">
                       <Button
                         onClick={(e) => {
@@ -293,15 +361,14 @@ export function SacWorkspace({
                           : "+3 Días"}
                       </Button>
 
-                      {/* AQUI ESTÁ LA MAGIA: Solo muestra el botón si el cliente ya completó el Lead */}
+                      {/* CANDADO: Solo permite promover si es Lead, si el cliente ya llenó, Y si ya tiene CRM-ID */}
                       {sess.workflow === "lead" &&
-                        sess.status === "completed_by_client" && (
+                        sess.status === "completed_by_client" &&
+                        sess.crmProspectId && (
                           <Button
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(
-                                `/sac/nueva-sesion?promote=${sess.sessionId}`,
-                              );
+                              handleSafePromoteToOnboarding(sess.sessionId);
                             }}
                             size="sm"
                             className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] gap-1 h-7"
@@ -374,7 +441,6 @@ export function SacWorkspace({
             className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40 transition-opacity"
             onClick={() => setSelectedSession(null)}
           />
-
           <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl border-l border-slate-200 flex flex-col animate-in slide-in-from-right duration-300">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
               <div>
@@ -397,6 +463,7 @@ export function SacWorkspace({
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs">
+              {/* ENLACE Y EXPIRACIÓN */}
               <div className="space-y-3">
                 <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-1">
                   <Link2 className="h-4 w-4 text-indigo-500" /> Enlace del
@@ -404,7 +471,7 @@ export function SacWorkspace({
                 </h4>
                 <div className="flex gap-2">
                   <Input
-                    value={`https://onboarding.grupopolak.com/registro/magic-link?token=${currentSession.token}`}
+                    value={`${window.location.origin}/registro/magic-link?token=${currentSession.token}`}
                     readOnly
                     className="bg-slate-50 font-mono text-[10px] text-slate-600 h-8"
                   />
@@ -441,7 +508,7 @@ export function SacWorkspace({
                     }
                     className={`h-6 text-[10px] gap-1 ${currentSession.status === "expired" ? "bg-indigo-600 hover:bg-indigo-700 text-white" : "text-indigo-600 border-indigo-200 hover:bg-indigo-50"}`}
                   >
-                    <RefreshCw className="h-3 w-3" />
+                    <RefreshCw className="h-3 w-3" />{" "}
                     {currentSession.status === "expired"
                       ? "Reactivar Enlace"
                       : "Extender (+3 Días)"}
@@ -449,10 +516,11 @@ export function SacWorkspace({
                 </div>
               </div>
 
+              {/* INTEGRACIÓN CRM */}
               <div className="space-y-3">
                 <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-1">
                   <Database className="h-4 w-4 text-indigo-500" /> Estado
-                  Comercial CRM (RN-070)
+                  Comercial CRM
                 </h4>
                 {currentSession.crmProspectId ? (
                   <div className="bg-emerald-50/50 p-3 rounded-lg border border-emerald-100 space-y-1">
@@ -469,30 +537,32 @@ export function SacWorkspace({
                       Este prospecto aún no cuenta con un identificador
                       comercial en SAP/CRM.
                     </p>
-                    {/* AQUI ESTÁ LA MAGIA 2: Solo permite enviar a CRM si ya llenaron los datos */}
-                    {currentSession.workflow === "lead" &&
-                      currentSession.status === "completed_by_client" && (
-                        <Button
-                          onClick={() =>
-                            handleSafeSyncToCRM(currentSession.sessionId)
-                          }
-                          variant="outline"
-                          size="sm"
-                          className="w-full h-8 text-xs gap-1.5 bg-white hover:bg-amber-50 hover:text-amber-800 border-amber-200 font-semibold"
-                        >
-                          <Database className="h-3.5 w-3.5" /> Generar Prospecto
-                        </Button>
-                      )}
+                    {/* CANDADO: Solo permite enviar a CRM si el cliente ya envió información */}
+                    {currentSession.status === "completed_by_client" && (
+                      <Button
+                        onClick={() =>
+                          handleSafeSyncToCRM(currentSession.sessionId)
+                        }
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-8 text-xs gap-1.5 bg-white hover:bg-amber-50 hover:text-amber-800 border-amber-200 font-semibold"
+                      >
+                        <Database className="h-3.5 w-3.5" /> Generar Prospecto
+                        en CRM
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
 
-              {currentSession.workflow === "onboarding" && (
+              {/* RESUMEN DE DATOS (Visible si Onboarding o si Lead ya fue completado) */}
+              {(currentSession.workflow === "onboarding" ||
+                currentSession.status === "completed_by_client") && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-1">
                     <h4 className="font-semibold text-slate-900 flex items-center gap-1.5">
                       <FileText className="h-4 w-4 text-indigo-500" />{" "}
-                      Información Capturada (Resumen)
+                      Información Capturada
                     </h4>
                     <Button
                       variant="ghost"
@@ -503,7 +573,6 @@ export function SacWorkspace({
                       <Eye className="h-3 w-3 mr-1" /> Ver Detalle
                     </Button>
                   </div>
-
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-4">
                     <div>
                       <p className="font-semibold text-slate-800 flex items-center gap-1 mb-0.5">
@@ -524,123 +593,87 @@ export function SacWorkspace({
                         </span>
                       </p>
                     </div>
-
-                    <div>
-                      <p className="font-semibold text-slate-800 flex items-center gap-1 mb-0.5">
-                        <MapPin className="h-3 w-3 text-slate-500" /> Domicilio
-                        Fiscal
-                      </p>
-                      <p className="text-slate-600 pl-4 truncate">
-                        {currentSession.ultimoAvance?.direccionFiscal?.calle ||
-                          "No capturado"}
-                      </p>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-200">
-                      <p className="font-semibold text-slate-800 flex items-center gap-1 mb-1.5">
-                        <Truck className="h-3 w-3 text-slate-500" />{" "}
-                        Destinatarios de Mercancía
-                      </p>
-                      {currentSession.ultimoAvance?.direccionesEntrega &&
-                      currentSession.ultimoAvance.direccionesEntrega.length >
-                        0 ? (
-                        <p className="text-slate-600 pl-4">
-                          (
-                          {
-                            currentSession.ultimoAvance.direccionesEntrega
-                              .length
-                          }
-                          ) Plantas adicionales registradas.
-                        </p>
-                      ) : (
-                        <p className="text-slate-500 pl-4 italic">
-                          No se han registrado plantas adicionales.
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-200">
-                      <p className="font-semibold text-slate-800 flex items-center gap-1 mb-0.5">
-                        <CreditCard className="h-3 w-3 text-slate-500" /> Datos
-                        Bancarios
-                      </p>
-                      <p className="text-slate-600 pl-4">
-                        {currentSession.ultimoAvance?.facturacion?.banco ||
-                          "No capturado"}{" "}
-                        (****{" "}
-                        {currentSession.ultimoAvance?.facturacion
-                          ?.cuenta4Digitos || "0000"}
-                        )
-                      </p>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-200">
-                      <p className="font-semibold text-slate-800 flex items-center gap-1 mb-1.5">
-                        <FileText className="h-3 w-3 text-emerald-600" />{" "}
-                        Documentos Adjuntos (Para validar)
-                      </p>
-                      <ul className="space-y-1.5 pl-4">
-                        <li>
-                          <a
-                            href="#"
-                            className="text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1"
-                          >
-                            Constancia_Situacion_Fiscal.pdf{" "}
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </li>
-                        <li>
-                          <a
-                            href="#"
-                            className="text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1"
-                          >
-                            Comprobante_Domicilio_Matriz.pdf{" "}
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </li>
-                      </ul>
-                    </div>
                   </div>
                 </div>
               )}
 
-              {currentSession.workflow === "onboarding" &&
-                currentSession.status === "completed_by_client" && (
-                  <div className="space-y-3 pt-4 border-t border-slate-100">
-                    <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 pb-1">
-                      <ShieldCheck className="h-4 w-4 text-emerald-600" />{" "}
-                      Resolución Final SAC
-                    </h4>
-                    <p className="text-[11px] text-slate-500 mb-2">
-                      Revisa el expediente completo. Puedes aprobarlo para el
-                      CRM o regresarlo al cliente para correcciones.
-                    </p>
+              {/* RESOLUCIONES SAC: Depende del Carril (Lead vs Onboarding) */}
+              {currentSession.status === "completed_by_client" && (
+                <div className="space-y-3 pt-4 border-t border-slate-100">
+                  <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 pb-1">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600" />{" "}
+                    Resolución Final SAC
+                  </h4>
 
-                    <div className="flex gap-2">
+                  {/* CARRIL 1: LEAD -> Promover */}
+                  {currentSession.workflow === "lead" ? (
+                    <div className="space-y-3">
+                      <p className="text-[11px] text-slate-500">
+                        Valida los datos y promueve a este cliente al flujo
+                        completo de Onboarding.
+                      </p>
                       <Button
-                        variant="outline"
+                        disabled={!currentSession.crmProspectId}
                         onClick={() =>
-                          handleSafeRequestCorrections(currentSession.sessionId)
+                          handleSafePromoteToOnboarding(
+                            currentSession.sessionId,
+                          )
                         }
-                        className="w-1/2 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-9 text-xs gap-1.5"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-xs gap-1.5 shadow-sm"
                       >
-                        <XCircle className="h-3.5 w-3.5" /> Corregir
+                        <ArrowUpRight className="h-3.5 w-3.5" /> Promover a
+                        Onboarding B2B
                       </Button>
-                      <Button
-                        onClick={() =>
-                          handleSafeApproveSession(currentSession.sessionId)
-                        }
-                        disabled={currentSession.status === "approved"}
-                        className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-xs gap-1.5 shadow-sm"
-                      >
-                        <Send className="h-3.5 w-3.5" />{" "}
-                        {currentSession.status === "approved"
-                          ? "Enviado"
-                          : "Aprobar"}
-                      </Button>
+                      {!currentSession.crmProspectId && (
+                        <p className="text-[10px] text-amber-600 font-medium text-center">
+                          Debes generar el ID de CRM primero.
+                        </p>
+                      )}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    /* CARRIL 2: ONBOARDING -> Aprobar o Corregir */
+                    <>
+                      <p className="text-[11px] text-slate-500 mb-2">
+                        Revisa el expediente completo. Puedes aprobarlo para el
+                        CRM o regresarlo al cliente para correcciones.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() =>
+                            handleSafeRequestCorrections(
+                              currentSession.sessionId,
+                            )
+                          }
+                          className="w-1/2 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-9 text-xs gap-1.5"
+                        >
+                          <XCircle className="h-3.5 w-3.5" /> Corregir
+                        </Button>
+                        <Button
+                          disabled={
+                            !currentSession.crmProspectId ||
+                            currentSession.status === "approved"
+                          }
+                          onClick={() =>
+                            handleSafeApproveSession(currentSession.sessionId)
+                          }
+                          className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-xs gap-1.5 shadow-sm"
+                        >
+                          <Send className="h-3.5 w-3.5" />{" "}
+                          {currentSession.status === "approved"
+                            ? "Enviado"
+                            : "Aprobar Expediente"}
+                        </Button>
+                      </div>
+                      {!currentSession.crmProspectId && (
+                        <p className="text-[10px] text-amber-600 font-medium text-center mt-2">
+                          Debes generar el ID de CRM antes de aprobar.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </>
@@ -899,20 +932,11 @@ export function SacWorkspace({
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4 animate-in fade-in">
           <Card className="max-w-md w-full bg-white shadow-2xl border-0 overflow-hidden animate-in zoom-in-95">
             <CardHeader
-              className={`
-              ${activeAlert.type === "approve" ? "bg-amber-50" : ""}
-              ${activeAlert.type === "correct" ? "bg-red-50" : ""}
-              ${activeAlert.type === "sync" || activeAlert.type === "promote" ? "bg-slate-50" : ""}
-              border-b border-slate-100 pb-4
-            `}
+              className={`border-b border-slate-100 pb-4 ${activeAlert.type === "approve" ? "bg-amber-50" : ""} ${activeAlert.type === "correct" ? "bg-red-50" : ""} ${activeAlert.type === "sync" || activeAlert.type === "promote" ? "bg-slate-50" : ""}`}
             >
               <div className="flex items-center gap-3">
                 <div
-                  className={`p-2 rounded-full 
-                  ${activeAlert.type === "approve" ? "bg-amber-100 text-amber-600" : ""}
-                  ${activeAlert.type === "correct" ? "bg-red-100 text-red-600" : ""}
-                  ${activeAlert.type === "sync" || activeAlert.type === "promote" ? "bg-indigo-100 text-indigo-600" : ""}
-                `}
+                  className={`p-2 rounded-full ${activeAlert.type === "approve" ? "bg-amber-100 text-amber-600" : ""} ${activeAlert.type === "correct" ? "bg-red-100 text-red-600" : ""} ${activeAlert.type === "sync" || activeAlert.type === "promote" ? "bg-indigo-100 text-indigo-600" : ""}`}
                 >
                   <AlertTriangle className="h-5 w-5" />
                 </div>
@@ -926,87 +950,17 @@ export function SacWorkspace({
               </div>
             </CardHeader>
             <CardContent className="p-6 text-sm text-slate-600 space-y-4">
-              {activeAlert.type === "sync" && (
-                <p>
-                  ¿Estás seguro de que deseas generar este registro como{" "}
-                  <strong>PROSPECTO</strong> en el CRM (SAP)? Esta acción creará
-                  un identificador comercial real.
-                </p>
-              )}
-              {activeAlert.type === "promote" && (
-                <p>
-                  ¿Confirmas que deseas enviar a este prospecto al proceso
-                  formal de <strong>ONBOARDING</strong>? El Magic Link se
-                  reactivará para solicitar domicilios y documentos.
-                </p>
-              )}
-              {activeAlert.type === "approve" && (
-                <p>
-                  ¿Estás completamente seguro de <strong>APROBAR</strong> este
-                  expediente? Enviará toda la información fiscal, domicilios y
-                  datos bancarios al CRM para el alta final.
-                </p>
-              )}
-              {activeAlert.type === "correct" && (
-                <div className="space-y-4">
-                  <p>
-                    Selecciona los apartados que el cliente debe corregir. El
-                    portal le habilitará únicamente estas secciones para
-                    agilizar su respuesta.
-                  </p>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    {CORRECTION_OPTIONS.map((opt) => {
-                      const isSelected = correctionSections.includes(opt.id);
-                      const Icon = opt.icon;
-                      return (
-                        <div
-                          key={opt.id}
-                          onClick={() => toggleCorrectionSection(opt.id)}
-                          className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors text-xs
-                            ${isSelected ? "bg-red-50 border-red-300 text-red-800 font-semibold" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}
-                          `}
-                        >
-                          <Icon
-                            className={`h-4 w-4 ${isSelected ? "text-red-500" : "text-slate-400"}`}
-                          />
-                          {opt.label}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-800">
-                      Mensaje / Detalle de la corrección:
-                    </label>
-                    <textarea
-                      value={correctionMessage}
-                      onChange={(e) => setCorrectionMessage(e.target.value)}
-                      className="w-full text-sm border border-slate-200 rounded p-2 focus:ring-red-500 focus:border-red-500"
-                      rows={3}
-                      placeholder="Ej. El comprobante de domicilio cargado en la sección de 'Documentos' está borroso..."
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+              <p>
+                ¿Deseas confirmar esta acción para la sesión{" "}
+                {activeAlert.sessionId}?
+              </p>
+              <div className="flex justify-end gap-3 mt-6">
                 <Button variant="outline" onClick={() => setActiveAlert(null)}>
                   Cancelar
                 </Button>
                 <Button
                   onClick={confirmAlertAction}
-                  disabled={
-                    activeAlert.type === "correct" &&
-                    (correctionSections.length === 0 ||
-                      !correctionMessage.trim())
-                  }
-                  className={`
-                    ${activeAlert.type === "approve" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}
-                    ${activeAlert.type === "correct" ? "bg-red-600 hover:bg-red-700 text-white" : ""}
-                    ${activeAlert.type === "sync" || activeAlert.type === "promote" ? "bg-indigo-600 hover:bg-indigo-700 text-white" : ""}
-                  `}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
                 >
                   Sí, Continuar
                 </Button>
