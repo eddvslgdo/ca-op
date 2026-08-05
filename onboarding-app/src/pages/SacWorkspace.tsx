@@ -36,6 +36,7 @@ import {
   Clock,
 } from "lucide-react";
 import type { MagicLinkSession } from "@/types/onboarding";
+import { supabase } from "@/lib/supabase";
 
 interface SacWorkspaceProps {
   sessions: MagicLinkSession[];
@@ -52,7 +53,13 @@ interface SacWorkspaceProps {
   onRefresh?: () => void;
 }
 
-type AlertActionType = "sync" | "promote" | "approve" | "correct" | null;
+type AlertActionType =
+  | "sync"
+  | "promote"
+  | "approve"
+  | "correct"
+  | "validate_planta"
+  | null;
 
 export function SacWorkspace({
   sessions,
@@ -74,7 +81,9 @@ export function SacWorkspace({
   const [activeAlert, setActiveAlert] = useState<{
     type: AlertActionType;
     sessionId: string;
+    plantaIndex?: number;
   } | null>(null);
+
   const [isFullDetailsOpen, setIsFullDetailsOpen] = useState(false);
 
   const [correctionSections, setCorrectionSections] = useState<string[]>([]);
@@ -100,6 +109,38 @@ export function SacWorkspace({
     }
   };
 
+  const executeToggleValidatePlanta = async (
+    sessionId: string,
+    plantaIndex: number,
+  ) => {
+    if (!currentSession || !currentSession.ultimoAvance?.direccionesEntrega)
+      return;
+
+    const nuevasPlantas = [...currentSession.ultimoAvance.direccionesEntrega];
+    nuevasPlantas[plantaIndex] = {
+      ...nuevasPlantas[plantaIndex],
+      validada: !nuevasPlantas[plantaIndex].validada,
+    };
+
+    const nuevoAvance = {
+      ...currentSession.ultimoAvance,
+      direccionesEntrega: nuevasPlantas,
+    };
+
+    try {
+      const { error } = await supabase
+        .from("sessions")
+        .update({ ultimo_avance: nuevoAvance })
+        .eq("session_id", sessionId);
+
+      if (error) throw error;
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error("Error al validar ubicación:", err);
+      alert("No se pudo actualizar el estado de validación.");
+    }
+  };
+
   const handleSafeSyncToCRM = (sessionId: string) =>
     setActiveAlert({ type: "sync", sessionId });
   const handleSafePromoteToOnboarding = (
@@ -117,6 +158,14 @@ export function SacWorkspace({
     setActiveAlert({ type: "correct", sessionId });
   };
 
+  const CORRECTION_OPTIONS = [
+    { id: "empresa", label: "Datos de Empresa", icon: Building2 },
+    { id: "domicilio", label: "Domicilio Fiscal", icon: MapPin },
+    { id: "entregas", label: "Destinatarios", icon: Truck },
+    { id: "facturacion", label: "Datos Bancarios", icon: CreditCard },
+    { id: "documentos", label: "Documentos", icon: FileText },
+  ];
+
   const toggleCorrectionSection = (sectionId: string) => {
     setCorrectionSections((prev) =>
       prev.includes(sectionId)
@@ -125,7 +174,7 @@ export function SacWorkspace({
     );
   };
 
-  const confirmAlertAction = () => {
+  const confirmAlertAction = async () => {
     if (!activeAlert) return;
     switch (activeAlert.type) {
       case "sync":
@@ -138,23 +187,38 @@ export function SacWorkspace({
         onApproveSession(activeAlert.sessionId);
         break;
       case "correct":
+        try {
+          const { error } = await supabase
+            .from("sessions")
+            .update({
+              status: "corrections_requested",
+              notas_correccion: correctionMessage,
+            })
+            .eq("session_id", activeAlert.sessionId);
+
+          if (error) throw error;
+          if (onRefresh) onRefresh();
+        } catch (err) {
+          console.error("Error al actualizar estado a corrección:", err);
+        }
+
         onRequestCorrections(
           activeAlert.sessionId,
           correctionSections,
           correctionMessage,
         );
         break;
+      case "validate_planta":
+        if (activeAlert.plantaIndex !== undefined) {
+          executeToggleValidatePlanta(
+            activeAlert.sessionId,
+            activeAlert.plantaIndex,
+          );
+        }
+        break;
     }
     setActiveAlert(null);
   };
-
-  const CORRECTION_OPTIONS = [
-    { id: "empresa", label: "Datos de Empresa", icon: Building2 },
-    { id: "domicilio", label: "Domicilio Fiscal", icon: MapPin },
-    { id: "entregas", label: "Destinatarios", icon: Truck },
-    { id: "facturacion", label: "Datos Bancarios", icon: CreditCard },
-    { id: "documentos", label: "Documentos Adjuntos", icon: FileText },
-  ];
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative overflow-hidden">
@@ -268,7 +332,6 @@ export function SacWorkspace({
 
                     <TableCell>
                       <div className="flex flex-col gap-1.5 items-start">
-                        {/* 1. TIPO DE FLUJO (Oculto en Onboarding para limpiar la vista) */}
                         {sess.workflow === "lead" && (
                           <Badge
                             variant="secondary"
@@ -278,7 +341,6 @@ export function SacWorkspace({
                           </Badge>
                         )}
 
-                        {/* 2. SEMÁFORO DEL TURNO */}
                         {sess.status === "active" && (
                           <Badge
                             variant="outline"
@@ -325,7 +387,6 @@ export function SacWorkspace({
                           </Badge>
                         )}
 
-                        {/* 3. ESTADO CRM */}
                         {sess.crmProspectId ? (
                           <Badge
                             variant="outline"
@@ -346,22 +407,24 @@ export function SacWorkspace({
                     </TableCell>
 
                     <TableCell className="text-right space-x-2 flex justify-end items-center h-full">
-                      <Button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onReactivateSession(sess.sessionId);
-                        }}
-                        size="sm"
-                        variant="outline"
-                        className={`text-[10px] gap-1 h-7 border-indigo-200 text-indigo-600 hover:bg-indigo-50 ${sess.status === "expired" ? "border-red-300 text-red-600 hover:bg-red-50" : ""}`}
-                      >
-                        <RefreshCw className="h-3 w-3" />{" "}
-                        {sess.status === "expired"
-                          ? "Reactivar Vencido"
-                          : "+3 Días"}
-                      </Button>
+                      {sess.status !== "completed_by_client" &&
+                        sess.status !== "approved" && (
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onReactivateSession(sess.sessionId);
+                            }}
+                            size="sm"
+                            variant="outline"
+                            className={`text-[10px] gap-1 h-7 border-indigo-200 text-indigo-600 hover:bg-indigo-50 ${sess.status === "expired" ? "border-red-300 text-red-600 hover:bg-red-50" : ""}`}
+                          >
+                            <RefreshCw className="h-3 w-3" />{" "}
+                            {sess.status === "expired"
+                              ? "Reactivar Vencido"
+                              : "+3 Días"}
+                          </Button>
+                        )}
 
-                      {/* CANDADO: Solo permite promover si es Lead, si el cliente ya llenó, Y si ya tiene CRM-ID */}
                       {sess.workflow === "lead" &&
                         sess.status === "completed_by_client" &&
                         sess.crmProspectId && (
@@ -463,7 +526,6 @@ export function SacWorkspace({
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs">
-              {/* ENLACE Y EXPIRACIÓN */}
               <div className="space-y-3">
                 <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-1">
                   <Link2 className="h-4 w-4 text-indigo-500" /> Enlace del
@@ -496,27 +558,29 @@ export function SacWorkspace({
                       {currentSession.fechaExpiracion}
                     </strong>
                   </p>
-                  <Button
-                    onClick={() =>
-                      onReactivateSession(currentSession.sessionId)
-                    }
-                    size="sm"
-                    variant={
-                      currentSession.status === "expired"
-                        ? "default"
-                        : "outline"
-                    }
-                    className={`h-6 text-[10px] gap-1 ${currentSession.status === "expired" ? "bg-indigo-600 hover:bg-indigo-700 text-white" : "text-indigo-600 border-indigo-200 hover:bg-indigo-50"}`}
-                  >
-                    <RefreshCw className="h-3 w-3" />{" "}
-                    {currentSession.status === "expired"
-                      ? "Reactivar Enlace"
-                      : "Extender (+3 Días)"}
-                  </Button>
+                  {currentSession.status !== "completed_by_client" &&
+                    currentSession.status !== "approved" && (
+                      <Button
+                        onClick={() =>
+                          onReactivateSession(currentSession.sessionId)
+                        }
+                        size="sm"
+                        variant={
+                          currentSession.status === "expired"
+                            ? "default"
+                            : "outline"
+                        }
+                        className={`h-6 text-[10px] gap-1 ${currentSession.status === "expired" ? "bg-indigo-600 hover:bg-indigo-700 text-white" : "text-indigo-600 border-indigo-200 hover:bg-indigo-50"}`}
+                      >
+                        <RefreshCw className="h-3 w-3" />{" "}
+                        {currentSession.status === "expired"
+                          ? "Reactivar Enlace"
+                          : "Extender (+3 Días)"}
+                      </Button>
+                    )}
                 </div>
               </div>
 
-              {/* INTEGRACIÓN CRM */}
               <div className="space-y-3">
                 <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-1">
                   <Database className="h-4 w-4 text-indigo-500" /> Estado
@@ -537,7 +601,6 @@ export function SacWorkspace({
                       Este prospecto aún no cuenta con un identificador
                       comercial en SAP/CRM.
                     </p>
-                    {/* CANDADO: Solo permite enviar a CRM si el cliente ya envió información */}
                     {currentSession.status === "completed_by_client" && (
                       <Button
                         onClick={() =>
@@ -555,58 +618,69 @@ export function SacWorkspace({
                 )}
               </div>
 
-              {/* RESUMEN DE DATOS (Visible si Onboarding o si Lead ya fue completado) */}
-              {(currentSession.workflow === "onboarding" ||
-                currentSession.status === "completed_by_client") && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                    <h4 className="font-semibold text-slate-900 flex items-center gap-1.5">
-                      <FileText className="h-4 w-4 text-indigo-500" />{" "}
-                      Información Capturada
-                    </h4>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsFullDetailsOpen(true)}
-                      className="h-6 px-2 text-[10px] text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800"
-                    >
-                      <Eye className="h-3 w-3 mr-1" /> Ver Detalle
-                    </Button>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-4">
-                    <div>
-                      <p className="font-semibold text-slate-800 flex items-center gap-1 mb-0.5">
-                        <Building2 className="h-3 w-3 text-slate-500" /> Empresa
-                      </p>
-                      <p className="text-slate-600 pl-4">
-                        RFC:{" "}
-                        <span className="font-mono text-slate-900">
-                          {currentSession.ultimoAvance?.empresa?.rfc ||
-                            "No capturado"}
-                        </span>
-                      </p>
-                      <p className="text-slate-600 pl-4">
-                        Contacto:{" "}
-                        <span className="text-slate-900">
-                          {currentSession.ultimoAvance?.contacto
-                            ?.nombreRepresentante || "No capturado"}
-                        </span>
-                      </p>
-                    </div>
+              {/* RESUMEN DE DATOS SIEMPRE VISIBLE */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <h4 className="font-semibold text-slate-900 flex items-center gap-1.5">
+                    <FileText className="h-4 w-4 text-indigo-500" /> Información
+                    Capturada
+                  </h4>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsFullDetailsOpen(true)}
+                    className="h-6 px-2 text-[10px] text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800"
+                  >
+                    <Eye className="h-3 w-3 mr-1" /> Ver Detalle
+                  </Button>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-4">
+                  <div>
+                    <p className="font-semibold text-slate-800 flex items-center gap-1 mb-0.5">
+                      <Building2 className="h-3 w-3 text-slate-500" /> Empresa
+                    </p>
+                    <p className="text-slate-600 pl-4">
+                      RFC:{" "}
+                      <span className="font-mono text-slate-900">
+                        {currentSession.ultimoAvance?.empresa?.rfc ||
+                          "No capturado"}
+                      </span>
+                    </p>
+                    <p className="text-slate-600 pl-4">
+                      Contacto:{" "}
+                      <span className="text-slate-900">
+                        {currentSession.ultimoAvance?.contacto
+                          ?.nombreRepresentante || "No capturado"}
+                      </span>
+                    </p>
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* RESOLUCIONES SAC: Depende del Carril (Lead vs Onboarding) */}
-              {currentSession.status === "completed_by_client" && (
+              {(currentSession.status === "completed_by_client" ||
+                currentSession.status === "corrections_requested") && (
                 <div className="space-y-3 pt-4 border-t border-slate-100">
                   <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 pb-1">
                     <ShieldCheck className="h-4 w-4 text-emerald-600" />{" "}
                     Resolución Final SAC
                   </h4>
 
-                  {/* CARRIL 1: LEAD -> Promover */}
-                  {currentSession.workflow === "lead" ? (
+                  {currentSession.status === "corrections_requested" ? (
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-center space-y-2">
+                      <AlertTriangle className="h-6 w-6 text-orange-500 mx-auto" />
+                      <div>
+                        <p className="text-sm font-bold text-orange-800">
+                          Enviado a Corrección
+                        </p>
+                        <p className="text-[11px] text-orange-600 mt-1 leading-relaxed">
+                          El expediente fue devuelto. El enlace del cliente ha
+                          sido habilitado nuevamente para que solucione los
+                          errores detectados.
+                        </p>
+                      </div>
+                    </div>
+                  ) : currentSession.workflow === "lead" ? (
                     <div className="space-y-3">
                       <p className="text-[11px] text-slate-500">
                         Valida los datos y promueve a este cliente al flujo
@@ -631,7 +705,6 @@ export function SacWorkspace({
                       )}
                     </div>
                   ) : (
-                    /* CARRIL 2: ONBOARDING -> Aprobar o Corregir */
                     <>
                       <p className="text-[11px] text-slate-500 mb-2">
                         Revisa el expediente completo. Puedes aprobarlo para el
@@ -874,50 +947,145 @@ export function SacWorkspace({
                   </div>
 
                   <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2">
-                      <Truck className="h-4 w-4 text-indigo-500" />{" "}
-                      Destinatarios de Mercancía (Plantas)
-                    </h4>
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <h4 className="font-bold text-slate-900 flex items-center gap-1.5">
+                        <Truck className="h-4 w-4 text-indigo-500" />
+                        Destinatarios de Mercancía (
+                        {currentSession.ultimoAvance?.direccionesEntrega
+                          ?.length || 0}
+                        )
+                      </h4>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-slate-50 border-slate-200"
+                      >
+                        Rol CRM: Ship-To Party
+                      </Badge>
+                    </div>
+
                     {currentSession.ultimoAvance?.direccionesEntrega &&
                     currentSession.ultimoAvance.direccionesEntrega.length >
                       0 ? (
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                         {currentSession.ultimoAvance.direccionesEntrega.map(
-                          (planta, idx) => (
+                          (planta: any, idx: number) => (
                             <div
                               key={idx}
-                              className="bg-slate-50 p-3 rounded border border-slate-100 text-xs"
+                              className="bg-slate-50/80 p-3 rounded-lg border border-slate-200 space-y-2"
                             >
-                              <p className="font-bold text-slate-800 mb-1">
-                                {planta.nombrePlanta}
-                              </p>
-                              <p className="text-slate-600">
-                                <span className="text-slate-500">
-                                  Contacto:
-                                </span>{" "}
-                                {planta.contactoRecepcion} (
-                                {planta.telefonoRecepcion})
-                              </p>
-                              <p className="text-slate-600">
-                                <span className="text-slate-500">
-                                  Dirección:
-                                </span>{" "}
-                                {planta.calle} #{planta.numeroExterior}, C.P.{" "}
-                                {planta.codigoPostal}
-                              </p>
-                              <p className="text-slate-600">
-                                <span className="text-slate-500">Zona:</span>{" "}
-                                {planta.municipio}, {planta.estado}
-                              </p>
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                                  <span
+                                    className={`h-2 w-2 rounded-full ${planta.validada ? "bg-emerald-500" : "bg-amber-500"}`}
+                                  />
+                                  {planta.nombrePlanta ||
+                                    `Planta / Bodega ${idx + 1}`}
+                                </span>
+
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={
+                                    planta.validada ? "outline" : "default"
+                                  }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveAlert({
+                                      type: "validate_planta",
+                                      sessionId: currentSession.sessionId,
+                                      plantaIndex: idx,
+                                    });
+                                  }}
+                                  className={`h-7 text-[11px] gap-1 px-2.5 transition-all ${
+                                    planta.validada
+                                      ? "border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                                      : "bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+                                  }`}
+                                >
+                                  {planta.validada ? (
+                                    <>
+                                      <Check className="h-3 w-3 text-emerald-600" />{" "}
+                                      Ubicación Validada
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ShieldCheck className="h-3 w-3" />{" "}
+                                      Validar Ubicación
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-600 pt-1 border-t border-slate-100">
+                                <div>
+                                  <p className="text-slate-500 font-medium">
+                                    Dirección de Entrega:
+                                  </p>
+                                  <p className="font-semibold text-slate-900">
+                                    {planta.calle} #
+                                    {planta.numeroExterior || "S/N"}
+                                  </p>
+                                  <p>
+                                    {planta.colonia}, C.P. {planta.codigoPostal}
+                                  </p>
+                                  <p>
+                                    {planta.municipio}, {planta.estado}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-slate-500 font-medium">
+                                    Encargado de Recepción:
+                                  </p>
+                                  <p className="font-semibold text-slate-900">
+                                    {planta.contactoRecepcion ||
+                                      "No especificado"}
+                                  </p>
+                                  <p className="text-slate-600">
+                                    Tel:{" "}
+                                    {planta.telefonoRecepcion ||
+                                      "No especificado"}
+                                  </p>
+                                  {planta.horarioRecepcion && (
+                                    <p className="text-[11px] text-indigo-600 mt-1 italic">
+                                      Horario: {planta.horarioRecepcion}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                                <span className="text-slate-500 flex items-center gap-1">
+                                  <FileText className="h-3.5 w-3.5 text-indigo-500" />{" "}
+                                  Comprobante de Domicilio
+                                </span>
+                                {planta.comprobanteDomicilioUrl ? (
+                                  <a
+                                    href={planta.comprobanteDomicilioUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-indigo-600 font-semibold hover:underline flex items-center gap-1"
+                                  >
+                                    Ver Documento{" "}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <span className="text-amber-600 font-medium flex items-center gap-1">
+                                    <AlertTriangle className="h-3 w-3" /> Sin
+                                    adjunto
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           ),
                         )}
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-500 italic">
-                        No se agregaron direcciones de entrega adicionales.
-                        Mismo domicilio fiscal.
-                      </p>
+                      <div className="p-3 bg-slate-50 rounded-lg text-center border border-dashed border-slate-200">
+                        <p className="text-xs text-slate-500 italic">
+                          Sin plantas adicionales. La mercancía se entregará en
+                          el domicilio fiscal registrado.
+                        </p>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -932,37 +1100,101 @@ export function SacWorkspace({
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4 animate-in fade-in">
           <Card className="max-w-md w-full bg-white shadow-2xl border-0 overflow-hidden animate-in zoom-in-95">
             <CardHeader
-              className={`border-b border-slate-100 pb-4 ${activeAlert.type === "approve" ? "bg-amber-50" : ""} ${activeAlert.type === "correct" ? "bg-red-50" : ""} ${activeAlert.type === "sync" || activeAlert.type === "promote" ? "bg-slate-50" : ""}`}
+              className={`border-b border-slate-100 pb-4 ${activeAlert.type === "approve" ? "bg-amber-50" : ""} ${activeAlert.type === "correct" ? "bg-red-50" : ""} ${activeAlert.type === "sync" || activeAlert.type === "promote" ? "bg-slate-50" : ""} ${activeAlert.type === "validate_planta" ? "bg-indigo-50" : ""}`}
             >
               <div className="flex items-center gap-3">
                 <div
-                  className={`p-2 rounded-full ${activeAlert.type === "approve" ? "bg-amber-100 text-amber-600" : ""} ${activeAlert.type === "correct" ? "bg-red-100 text-red-600" : ""} ${activeAlert.type === "sync" || activeAlert.type === "promote" ? "bg-indigo-100 text-indigo-600" : ""}`}
+                  className={`p-2 rounded-full ${activeAlert.type === "approve" ? "bg-amber-100 text-amber-600" : ""} ${activeAlert.type === "correct" ? "bg-red-100 text-red-600" : ""} ${activeAlert.type === "sync" || activeAlert.type === "promote" || activeAlert.type === "validate_planta" ? "bg-indigo-100 text-indigo-600" : ""}`}
                 >
-                  <AlertTriangle className="h-5 w-5" />
+                  {activeAlert.type === "validate_planta" ? (
+                    <ShieldCheck className="h-5 w-5" />
+                  ) : (
+                    <AlertTriangle className="h-5 w-5" />
+                  )}
                 </div>
                 <CardTitle className="text-base text-slate-900">
                   {activeAlert.type === "sync" && "Generar Prospecto en CRM"}
                   {activeAlert.type === "promote" && "Promover a Onboarding"}
                   {activeAlert.type === "approve" && "Aprobar & Enriquecer CRM"}
+                  {activeAlert.type === "validate_planta" &&
+                    "Validar Ubicación de Entrega"}
                   {activeAlert.type === "correct" &&
                     "Solicitar Correcciones al Cliente"}
                 </CardTitle>
               </div>
             </CardHeader>
             <CardContent className="p-6 text-sm text-slate-600 space-y-4">
-              <p>
-                ¿Deseas confirmar esta acción para la sesión{" "}
-                {activeAlert.sessionId}?
-              </p>
-              <div className="flex justify-end gap-3 mt-6">
+              {activeAlert.type === "correct" ? (
+                <div className="space-y-5">
+                  <p className="text-slate-600 text-xs">
+                    Selecciona las secciones que el cliente debe corregir e
+                    indica el motivo del rechazo. El enlace se reactivará
+                    automáticamente.
+                  </p>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Secciones con errores
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {CORRECTION_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => toggleCorrectionSection(opt.id)}
+                          className={`flex items-center gap-2 p-2 rounded-md border text-xs text-left transition-colors ${
+                            correctionSections.includes(opt.id)
+                              ? "bg-red-50 border-red-200 text-red-700 font-semibold"
+                              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <opt.icon className="h-3.5 w-3.5" />
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Comentarios para el cliente
+                    </label>
+                    <textarea
+                      className="w-full flex min-h-[80px] rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                      placeholder="Ej. El comprobante de domicilio de la Planta 2 no coincide con la dirección capturada."
+                      value={correctionMessage}
+                      onChange={(e) => setCorrectionMessage(e.target.value)}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <p>
+                  {activeAlert.type === "validate_planta"
+                    ? "¿Estás seguro de que deseas cambiar el estado de validación de esta planta de entrega?"
+                    : `¿Deseas confirmar esta acción para la sesión ${activeAlert.sessionId}?`}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-3 mt-6 pt-2">
                 <Button variant="outline" onClick={() => setActiveAlert(null)}>
                   Cancelar
                 </Button>
                 <Button
                   onClick={confirmAlertAction}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                  disabled={
+                    activeAlert.type === "correct" &&
+                    (correctionSections.length === 0 ||
+                      !correctionMessage.trim())
+                  }
+                  className={
+                    activeAlert.type === "correct"
+                      ? "bg-red-600 hover:bg-red-700 text-white"
+                      : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                  }
                 >
-                  Sí, Continuar
+                  {activeAlert.type === "correct"
+                    ? "Enviar Solicitud"
+                    : "Sí, Continuar"}
                 </Button>
               </div>
             </CardContent>

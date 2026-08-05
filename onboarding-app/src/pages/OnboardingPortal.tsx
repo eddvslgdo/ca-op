@@ -50,7 +50,11 @@ export function OnboardingPortal() {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  // NUEVOS ESTADOS: Casilla legal y Archivos PDF
+  // Estados: Control de Correcciones
+  const [sessionStatus, setSessionStatus] = useState<string>("");
+  const [correctionNotes, setCorrectionNotes] = useState<string>("");
+
+  // Casilla legal y Archivos PDF
   const [isAgreed, setIsAgreed] = useState(false);
   const [documentFiles, setDocumentFiles] = useState<StepDocumentsData>({
     csf: null,
@@ -107,6 +111,11 @@ export function OnboardingPortal() {
         if (error || !data) {
           setInvalidToken(true);
         } else {
+          setSessionStatus(data.status);
+          if (data.notas_correccion) {
+            setCorrectionNotes(data.notas_correccion);
+          }
+
           // Bloquear si ya fue completado o aprobado
           if (
             data.status === "completed_by_client" ||
@@ -116,7 +125,8 @@ export function OnboardingPortal() {
           }
 
           setWorkflow(data.workflow);
-          setDbSessionId(data.session_id);
+          // Intentamos capturar el ID de diferentes formas por si la columna cambia de nombre
+          setDbSessionId(data.session_id || data.sessionId || data.id);
 
           // Pre-cargamos el formulario con los datos de Supabase
           if (data.ultimo_avance) {
@@ -162,15 +172,13 @@ export function OnboardingPortal() {
       facturacion: { ...prev.facturacion, ...fields },
     }));
 
-  // SUBIDA DE ARCHIVOS A SUPABASE STORAGE
   const uploadDocumentsToStorage = async (): Promise<
     Record<string, string>
   > => {
     const uploadedUrls: Record<string, string> = {};
-
     for (const [key, file] of Object.entries(documentFiles)) {
       if (file) {
-        const filePath = `${dbSessionId}/${key}_${Date.now()}.pdf`;
+        const filePath = `${dbSessionId || token}/${key}_${Date.now()}.pdf`;
         const { error: uploadError } = await supabase.storage
           .from("onboarding-documents")
           .upload(filePath, file, { upsert: true });
@@ -179,20 +187,16 @@ export function OnboardingPortal() {
           const { data: publicUrlData } = supabase.storage
             .from("onboarding-documents")
             .getPublicUrl(filePath);
-
           uploadedUrls[key] = publicUrlData.publicUrl;
         } else {
           console.error(`Error al subir ${key}:`, uploadError);
         }
       }
     }
-
     return uploadedUrls;
   };
 
-  // FUNCIÓN PARA AUTOGUARDADO Y AVANCE DE PASO
   const handleNext = async () => {
-    // Validaciones de teléfono
     if (workflow === "lead" && currentStep === 1) {
       if (
         !formData.contacto.telefonoContacto ||
@@ -216,35 +220,55 @@ export function OnboardingPortal() {
     setIsSaving(true);
     try {
       if (currentStep < totalSteps) {
-        // Auto-guardado de progreso en Supabase
-        await supabase
+        // Auto-guardado (usando token para garantizar la fila)
+        const { data: savedRows } = await supabase
           .from("sessions")
           .update({ ultimo_avance: formData })
-          .eq("session_id", dbSessionId);
+          .eq("token", token)
+          .select();
+
+        if (!savedRows || savedRows.length === 0) {
+          console.warn(
+            "⚠️ Advertencia: Supabase bloqueó el auto-guardado. Revisa tus políticas RLS.",
+          );
+        }
 
         setCurrentStep((prev) => prev + 1);
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
-        // PASO FINAL: Subir PDFs a Storage y cerrar la sesión
+        // PASO FINAL: Subir PDFs y cerrar la sesión
         const uploadedDocUrls = await uploadDocumentsToStorage();
-
         const finalFormData = {
           ...formData,
           documentosTemporales: uploadedDocUrls,
         };
 
-        await supabase
+        // Hacemos UPDATE usando el token (infalible) y forzamos a que retorne la fila editada
+        const { data: updatedRows, error: updateError } = await supabase
           .from("sessions")
           .update({
             ultimo_avance: finalFormData,
             status: "completed_by_client",
+            notas_correccion: null,
           })
-          .eq("session_id", dbSessionId);
+          .eq("token", token)
+          .select();
 
-        // Registrar log de auditoría
+        if (updateError) throw updateError;
+
+        // 🚨 CANDADO ESTRICTO DE FALLO SILENCIOSO 🚨
+        if (!updatedRows || updatedRows.length === 0) {
+          alert(
+            "⚠️ ERROR CRÍTICO DE PERMISOS: La base de datos no permitió guardar la información. Por favor, ve a Supabase > Authentication > Policies y asegúrate de tener una política de 'UPDATE' habilitada para la tabla 'sessions'.",
+          );
+          setIsSaving(false);
+          return; // Detenemos la ejecución, no le mostramos la pantalla de éxito
+        }
+
+        // Si pasó el candado, registramos auditoría
         await supabase.from("audit_logs").insert([
           {
-            session_id: dbSessionId,
+            session_id: dbSessionId || token,
             usuario: "Cliente (Portal)",
             accion: "Finalización de Captura y Carga de Expediente",
             resultado: "Exitoso",
@@ -256,7 +280,7 @@ export function OnboardingPortal() {
     } catch (error) {
       console.error("Error al guardar:", error);
       alert(
-        "Hubo un problema guardando tu progreso. Por favor intenta nuevamente.",
+        "Hubo un problema de conexión guardando tu progreso. Por favor intenta nuevamente.",
       );
     } finally {
       setTimeout(() => setIsSaving(false), 500);
@@ -300,7 +324,6 @@ export function OnboardingPortal() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-start relative">
-      {/* HEADER FIJO CON INDICADOR DE GUARDADO */}
       <header className="w-full bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 bg-indigo-600 rounded flex items-center justify-center font-bold text-white">
@@ -318,7 +341,6 @@ export function OnboardingPortal() {
           </div>
         </div>
 
-        {/* INDICADOR DE STATUS / GUARDADO */}
         {isSubmitted ? (
           <div className="flex items-center gap-2 text-xs font-medium text-amber-700 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200">
             <span className="h-2 w-2 rounded-full bg-amber-500" /> En Revisión
@@ -358,6 +380,30 @@ export function OnboardingPortal() {
           </Card>
         ) : (
           <>
+            {sessionStatus === "corrections_requested" && (
+              <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm animate-in fade-in slide-in-from-top-2">
+                <div className="flex gap-3">
+                  <AlertTriangle className="h-6 w-6 text-red-600 shrink-0" />
+                  <div>
+                    <h3 className="text-sm font-bold text-red-800">
+                      Acción Requerida: Correcciones en tu expediente
+                    </h3>
+                    <p className="text-sm text-red-700 mt-1 leading-relaxed">
+                      Nuestro equipo de validación ha revisado tu información y
+                      nos solicita actualizar los siguientes detalles antes de
+                      continuar. Por favor, corrige la información en los pasos
+                      indicados y vuelve a enviar el formulario.
+                    </p>
+                    {correctionNotes && (
+                      <div className="mt-3 bg-white/70 p-3 rounded border border-red-100 text-sm text-red-900 font-medium italic">
+                        "{correctionNotes}"
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-3 px-2">
               <div className="flex justify-between text-xs font-medium text-slate-500">
                 <span>
