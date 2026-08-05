@@ -86,8 +86,10 @@ export function SacWorkspace({
 
   const [isFullDetailsOpen, setIsFullDetailsOpen] = useState(false);
 
-  const [correctionSections, setCorrectionSections] = useState<string[]>([]);
-  const [correctionMessage, setCorrectionMessage] = useState("");
+  // NUEVO ESTADO: Mapa de correcciones { "empresa": "Falta RFC", "documentos": "Borroso" }
+  const [correctionNotesMap, setCorrectionNotesMap] = useState<
+    Record<string, string>
+  >({});
 
   const currentSession = selectedSession
     ? sessions.find((s) => s.sessionId === selectedSession.sessionId) || null
@@ -152,9 +154,10 @@ export function SacWorkspace({
   };
   const handleSafeApproveSession = (sessionId: string) =>
     setActiveAlert({ type: "approve", sessionId });
+
+  // Al abrir el modal de correcciones, limpiamos el mapa
   const handleSafeRequestCorrections = (sessionId: string) => {
-    setCorrectionSections([]);
-    setCorrectionMessage("");
+    setCorrectionNotesMap({});
     setActiveAlert({ type: "correct", sessionId });
   };
 
@@ -163,15 +166,28 @@ export function SacWorkspace({
     { id: "domicilio", label: "Domicilio Fiscal", icon: MapPin },
     { id: "entregas", label: "Destinatarios", icon: Truck },
     { id: "facturacion", label: "Datos Bancarios", icon: CreditCard },
-    { id: "documentos", label: "Documentos", icon: FileText },
+    { id: "documentos", label: "Documentos Adjuntos", icon: FileText },
   ];
 
+  // NUEVA LÓGICA: Toggle del mapa de correcciones
   const toggleCorrectionSection = (sectionId: string) => {
-    setCorrectionSections((prev) =>
-      prev.includes(sectionId)
-        ? prev.filter((id) => id !== sectionId)
-        : [...prev, sectionId],
-    );
+    setCorrectionNotesMap((prev) => {
+      const newMap = { ...prev };
+      if (newMap[sectionId] !== undefined) {
+        delete newMap[sectionId]; // Si ya existe, lo quitamos (lo deselecciona)
+      } else {
+        newMap[sectionId] = ""; // Si no existe, lo agregamos vacío
+      }
+      return newMap;
+    });
+  };
+
+  // NUEVA LÓGICA: Actualizar el texto individual
+  const updateCorrectionNote = (sectionId: string, note: string) => {
+    setCorrectionNotesMap((prev) => ({
+      ...prev,
+      [sectionId]: note,
+    }));
   };
 
   const confirmAlertAction = async () => {
@@ -192,7 +208,8 @@ export function SacWorkspace({
             .from("sessions")
             .update({
               status: "corrections_requested",
-              notas_correccion: correctionMessage,
+              // Convertimos el diccionario a un texto JSON para guardarlo
+              notas_correccion: JSON.stringify(correctionNotesMap),
             })
             .eq("session_id", activeAlert.sessionId);
 
@@ -202,10 +219,11 @@ export function SacWorkspace({
           console.error("Error al actualizar estado a corrección:", err);
         }
 
+        // Ejecutamos prop pasandole todo junto (para futuros correos)
         onRequestCorrections(
           activeAlert.sessionId,
-          correctionSections,
-          correctionMessage,
+          Object.keys(correctionNotesMap),
+          JSON.stringify(correctionNotesMap),
         );
         break;
       case "validate_planta":
@@ -1127,45 +1145,64 @@ export function SacWorkspace({
               {activeAlert.type === "correct" ? (
                 <div className="space-y-5">
                   <p className="text-slate-600 text-xs">
-                    Selecciona las secciones que el cliente debe corregir e
-                    indica el motivo del rechazo. El enlace se reactivará
-                    automáticamente.
+                    Selecciona las secciones que el cliente debe corregir. El
+                    enlace se reactivará automáticamente.
                   </p>
 
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      Secciones con errores
+                      1. Seleccionar Secciones
                     </label>
                     <div className="grid grid-cols-2 gap-2">
-                      {CORRECTION_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => toggleCorrectionSection(opt.id)}
-                          className={`flex items-center gap-2 p-2 rounded-md border text-xs text-left transition-colors ${
-                            correctionSections.includes(opt.id)
-                              ? "bg-red-50 border-red-200 text-red-700 font-semibold"
-                              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                          }`}
-                        >
-                          <opt.icon className="h-3.5 w-3.5" />
-                          {opt.label}
-                        </button>
-                      ))}
+                      {CORRECTION_OPTIONS.map((opt) => {
+                        const isSelected =
+                          correctionNotesMap[opt.id] !== undefined;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => toggleCorrectionSection(opt.id)}
+                            className={`flex items-center gap-2 p-2 rounded-md border text-xs text-left transition-colors ${
+                              isSelected
+                                ? "bg-red-50 border-red-200 text-red-700 font-semibold"
+                                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                            }`}
+                          >
+                            <opt.icon className="h-3.5 w-3.5" />
+                            {opt.label}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      Comentarios para el cliente
-                    </label>
-                    <textarea
-                      className="w-full flex min-h-[80px] rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                      placeholder="Ej. El comprobante de domicilio de la Planta 2 no coincide con la dirección capturada."
-                      value={correctionMessage}
-                      onChange={(e) => setCorrectionMessage(e.target.value)}
-                    />
-                  </div>
+                  {Object.keys(correctionNotesMap).length > 0 && (
+                    <div className="space-y-3 mt-4 border-t border-slate-100 pt-4">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        2. Comentarios por Sección
+                      </label>
+                      {Object.keys(correctionNotesMap).map((sectionId) => {
+                        const opt = CORRECTION_OPTIONS.find(
+                          (o) => o.id === sectionId,
+                        );
+                        return (
+                          <div key={sectionId} className="space-y-1">
+                            <span className="text-xs font-semibold text-slate-700">
+                              {opt?.label}
+                            </span>
+                            <textarea
+                              className="w-full text-xs p-2 border rounded-md border-slate-300 focus:outline-none focus:ring-1 focus:ring-red-400 min-h-[60px]"
+                              placeholder={`Escribe el error a corregir en ${opt?.label}...`}
+                              value={correctionNotesMap[sectionId]}
+                              onChange={(e) =>
+                                updateCorrectionNote(sectionId, e.target.value)
+                              }
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p>
@@ -1183,8 +1220,10 @@ export function SacWorkspace({
                   onClick={confirmAlertAction}
                   disabled={
                     activeAlert.type === "correct" &&
-                    (correctionSections.length === 0 ||
-                      !correctionMessage.trim())
+                    (Object.keys(correctionNotesMap).length === 0 ||
+                      Object.values(correctionNotesMap).some(
+                        (note) => note.trim() === "",
+                      ))
                   }
                   className={
                     activeAlert.type === "correct"
@@ -1193,7 +1232,7 @@ export function SacWorkspace({
                   }
                 >
                   {activeAlert.type === "correct"
-                    ? "Enviar Solicitud"
+                    ? "Enviar Solicitudes"
                     : "Sí, Continuar"}
                 </Button>
               </div>

@@ -50,9 +50,11 @@ export function OnboardingPortal() {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  // Estados: Control de Correcciones
+  // Estados: Control de Correcciones (AHORA ES UN OBJETO JSON)
   const [sessionStatus, setSessionStatus] = useState<string>("");
-  const [correctionNotes, setCorrectionNotes] = useState<string>("");
+  const [correctionNotes, setCorrectionNotes] = useState<
+    Record<string, string>
+  >({});
 
   // Casilla legal y Archivos PDF
   const [isAgreed, setIsAgreed] = useState(false);
@@ -112,8 +114,15 @@ export function OnboardingPortal() {
           setInvalidToken(true);
         } else {
           setSessionStatus(data.status);
+
+          // DESEMPAQUETAMOS EL JSON DE CORRECCIONES
           if (data.notas_correccion) {
-            setCorrectionNotes(data.notas_correccion);
+            try {
+              const parsedNotes = JSON.parse(data.notas_correccion);
+              setCorrectionNotes(parsedNotes);
+            } catch (e) {
+              console.error("Error parseando notas de corrección");
+            }
           }
 
           // Bloquear si ya fue completado o aprobado
@@ -125,7 +134,6 @@ export function OnboardingPortal() {
           }
 
           setWorkflow(data.workflow);
-          // Intentamos capturar el ID de diferentes formas por si la columna cambia de nombre
           setDbSessionId(data.session_id || data.sessionId || data.id);
 
           // Pre-cargamos el formulario con los datos de Supabase
@@ -220,7 +228,6 @@ export function OnboardingPortal() {
     setIsSaving(true);
     try {
       if (currentStep < totalSteps) {
-        // Auto-guardado (usando token para garantizar la fila)
         const { data: savedRows } = await supabase
           .from("sessions")
           .update({ ultimo_avance: formData })
@@ -236,14 +243,12 @@ export function OnboardingPortal() {
         setCurrentStep((prev) => prev + 1);
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
-        // PASO FINAL: Subir PDFs y cerrar la sesión
         const uploadedDocUrls = await uploadDocumentsToStorage();
         const finalFormData = {
           ...formData,
           documentosTemporales: uploadedDocUrls,
         };
 
-        // Hacemos UPDATE usando el token (infalible) y forzamos a que retorne la fila editada
         const { data: updatedRows, error: updateError } = await supabase
           .from("sessions")
           .update({
@@ -256,16 +261,14 @@ export function OnboardingPortal() {
 
         if (updateError) throw updateError;
 
-        // 🚨 CANDADO ESTRICTO DE FALLO SILENCIOSO 🚨
         if (!updatedRows || updatedRows.length === 0) {
           alert(
-            "⚠️ ERROR CRÍTICO DE PERMISOS: La base de datos no permitió guardar la información. Por favor, ve a Supabase > Authentication > Policies y asegúrate de tener una política de 'UPDATE' habilitada para la tabla 'sessions'.",
+            "⚠️ ERROR CRÍTICO DE PERMISOS: La base de datos no permitió guardar la información.",
           );
           setIsSaving(false);
-          return; // Detenemos la ejecución, no le mostramos la pantalla de éxito
+          return;
         }
 
-        // Si pasó el candado, registramos auditoría
         await supabase.from("audit_logs").insert([
           {
             session_id: dbSessionId || token,
@@ -293,6 +296,29 @@ export function OnboardingPortal() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
+
+  // HELPERS PARA MAPEAR EL PASO ACTUAL CON EL ID DE CORRECCIÓN
+  const getStepKey = (step: number) => {
+    if (workflow === "lead") return "empresa";
+    switch (step) {
+      case 1:
+        return "empresa";
+      case 2:
+        return "domicilio";
+      case 3:
+        return "entregas";
+      case 4:
+        return "facturacion";
+      case 5:
+        return "documentos";
+      default:
+        return "";
+    }
+  };
+
+  const currentStepKey = getStepKey(currentStep);
+  const currentStepError = correctionNotes[currentStepKey];
+  const hasAnyError = Object.keys(correctionNotes).length > 0;
 
   if (isLoading) {
     return (
@@ -380,23 +406,31 @@ export function OnboardingPortal() {
           </Card>
         ) : (
           <>
-            {sessionStatus === "corrections_requested" && (
+            {/* BANNER DINÁMICO DE CORRECCIONES */}
+            {sessionStatus === "corrections_requested" && hasAnyError && (
               <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm animate-in fade-in slide-in-from-top-2">
                 <div className="flex gap-3">
                   <AlertTriangle className="h-6 w-6 text-red-600 shrink-0" />
-                  <div>
+                  <div className="w-full">
                     <h3 className="text-sm font-bold text-red-800">
                       Acción Requerida: Correcciones en tu expediente
                     </h3>
                     <p className="text-sm text-red-700 mt-1 leading-relaxed">
-                      Nuestro equipo de validación ha revisado tu información y
-                      nos solicita actualizar los siguientes detalles antes de
-                      continuar. Por favor, corrige la información en los pasos
-                      indicados y vuelve a enviar el formulario.
+                      Nuestro equipo de validación solicita que actualices
+                      algunos detalles antes de continuar.
                     </p>
-                    {correctionNotes && (
-                      <div className="mt-3 bg-white/70 p-3 rounded border border-red-100 text-sm text-red-900 font-medium italic">
-                        "{correctionNotes}"
+
+                    {currentStepError ? (
+                      <div className="mt-3 bg-white/70 p-3 rounded border border-red-100 text-sm text-red-900 font-medium italic shadow-sm">
+                        <span className="block text-[10px] uppercase font-bold text-red-500 not-italic mb-1">
+                          Comentario para este paso:
+                        </span>
+                        "{currentStepError}"
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-sm text-red-600/80 font-medium">
+                        (Avanza a las secciones marcadas en rojo para ver los
+                        comentarios).
                       </div>
                     )}
                   </div>
@@ -413,34 +447,35 @@ export function OnboardingPortal() {
               </div>
               <Progress value={progressPercentage} className="h-2" />
 
+              {/* INDICADORES DE PASO (Con marcadores Rojos de Error) */}
               {workflow === "onboarding" ? (
                 <div className="grid grid-cols-6 gap-2 pt-2 text-center text-[10px] md:text-xs">
                   <div
-                    className={`flex flex-col items-center gap-1 ${currentStep >= 1 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
+                    className={`flex flex-col items-center gap-1 ${correctionNotes["empresa"] ? "text-red-600 font-bold" : currentStep >= 1 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
                   >
                     <Building2 className="h-4 w-4" />
                     <span className="hidden md:block">Empresa</span>
                   </div>
                   <div
-                    className={`flex flex-col items-center gap-1 ${currentStep >= 2 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
+                    className={`flex flex-col items-center gap-1 ${correctionNotes["domicilio"] ? "text-red-600 font-bold" : currentStep >= 2 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
                   >
                     <MapPin className="h-4 w-4" />
                     <span className="hidden md:block">Domicilio</span>
                   </div>
                   <div
-                    className={`flex flex-col items-center gap-1 ${currentStep >= 3 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
+                    className={`flex flex-col items-center gap-1 ${correctionNotes["entregas"] ? "text-red-600 font-bold" : currentStep >= 3 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
                   >
                     <Truck className="h-4 w-4" />
                     <span className="hidden md:block">Entregas</span>
                   </div>
                   <div
-                    className={`flex flex-col items-center gap-1 ${currentStep >= 4 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
+                    className={`flex flex-col items-center gap-1 ${correctionNotes["facturacion"] ? "text-red-600 font-bold" : currentStep >= 4 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
                   >
                     <CreditCard className="h-4 w-4" />
                     <span className="hidden md:block">Facturación</span>
                   </div>
                   <div
-                    className={`flex flex-col items-center gap-1 ${currentStep >= 5 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
+                    className={`flex flex-col items-center gap-1 ${correctionNotes["documentos"] ? "text-red-600 font-bold" : currentStep >= 5 ? "text-indigo-700 font-bold" : "text-slate-400"}`}
                   >
                     <FileText className="h-4 w-4" />
                     <span className="hidden md:block">Documentos</span>
@@ -454,7 +489,9 @@ export function OnboardingPortal() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-2 pt-2 text-center text-xs">
-                  <div className="flex flex-col items-center gap-1 text-indigo-700 font-bold">
+                  <div
+                    className={`flex flex-col items-center gap-1 ${correctionNotes["empresa"] ? "text-red-600 font-bold" : "text-indigo-700 font-bold"}`}
+                  >
                     <Building2 className="h-4 w-4" />
                     <span>Datos Base del Prospecto</span>
                   </div>
@@ -462,7 +499,9 @@ export function OnboardingPortal() {
               )}
             </div>
 
-            <Card className="shadow-xl border-slate-200 animate-in fade-in slide-in-from-bottom-4">
+            <Card
+              className={`shadow-xl transition-colors duration-300 animate-in fade-in slide-in-from-bottom-4 ${currentStepError ? "border-red-300 ring-4 ring-red-50" : "border-slate-200"}`}
+            >
               <CardContent className="min-h-[350px] p-6 md:p-8 border-y border-slate-100 bg-white">
                 {currentStep === 1 && (
                   <StepCompany
