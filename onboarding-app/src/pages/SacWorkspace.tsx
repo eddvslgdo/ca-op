@@ -34,14 +34,15 @@ import {
   Eye,
   RefreshCw,
   Clock,
+  Briefcase,
+  Star,
+  Layers,
 } from "lucide-react";
 import type { MagicLinkSession } from "@/types/onboarding";
 import { supabase } from "@/lib/supabase";
 
 interface SacWorkspaceProps {
   sessions: MagicLinkSession[];
-  onSessionCreated?: (session: MagicLinkSession) => void;
-  onPromoteToOnboarding: (sessionId: string) => void;
   onSyncSessionToCRM: (sessionId: string) => void;
   onApproveSession: (sessionId: string) => void;
   onReactivateSession: (sessionId: string) => void;
@@ -153,7 +154,6 @@ export function SacWorkspace({
     setActiveAlert({ type: "correct", sessionId });
   };
 
-  // NAVEGACIÓN DIRECTA A LA PANTALLA DE NUEVA SESIÓN
   const handleSafePromoteToOnboarding = (
     sessionId: string,
     e?: React.MouseEvent,
@@ -234,6 +234,29 @@ export function SacWorkspace({
     setActiveAlert(null);
   };
 
+  // Helper para determinar la Fase Macro
+  const getFaseMacro = (sess: MagicLinkSession) => {
+    if (sess.status === "approved") {
+      return {
+        label: "Cliente Creado",
+        color: "bg-purple-100 text-purple-700 border-purple-200",
+        icon: Star,
+      };
+    }
+    if (sess.workflow === "onboarding") {
+      return {
+        label: "Onboarding",
+        color: "bg-blue-100 text-blue-700 border-blue-200",
+        icon: Layers,
+      };
+    }
+    return {
+      label: "Prospecto (Lead)",
+      color: "bg-slate-100 text-slate-700 border-slate-200",
+      icon: User,
+    };
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative overflow-hidden">
       <header className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 z-10">
@@ -300,162 +323,202 @@ export function SacWorkspace({
         {activeTab === "sessions" && (
           <Card className="border-slate-200 shadow-sm bg-white overflow-hidden">
             <Table>
-              <TableHeader className="bg-slate-50">
+              <TableHeader className="bg-slate-50 border-b border-slate-200">
                 <TableRow>
-                  <TableHead className="text-xs font-semibold">
+                  <TableHead className="text-sm font-bold text-slate-700 py-4 w-[25%]">
                     ID Sesión / Empresa
                   </TableHead>
-                  <TableHead className="text-xs font-semibold">
+                  <TableHead className="text-sm font-bold text-slate-700 w-[15%]">
+                    Fase del Proceso
+                  </TableHead>
+                  <TableHead className="text-sm font-bold text-slate-700 w-[20%]">
+                    Estado Operativo
+                  </TableHead>
+                  <TableHead className="text-sm font-bold text-slate-700 w-[20%]">
                     Unidad de Negocio
                   </TableHead>
-                  <TableHead className="text-xs font-semibold">
-                    Workflow & Estado CRM
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold text-right">
-                    Acciones Directas
+                  <TableHead className="text-sm font-bold text-slate-700 text-right w-[20%]">
+                    Acciones
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sessions.map((sess) => (
-                  <TableRow
-                    key={sess.sessionId}
-                    className="cursor-pointer hover:bg-slate-50 transition-colors"
-                    onClick={() => setSelectedSession(sess)}
-                  >
-                    <TableCell>
-                      <p className="text-xs font-mono text-indigo-600 font-medium">
-                        {sess.sessionId}
-                      </p>
-                      <p className="text-xs font-semibold text-slate-900">
-                        {sess.ultimoAvance?.empresa?.razonSocial ||
-                          "Sin Nombre"}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className="bg-slate-50 text-slate-600"
-                      >
-                        {Array.isArray(sess.configComercial) &&
-                        sess.configComercial.length > 0
-                          ? sess.configComercial[0].unidadNegocio
-                          : "No Definida"}
-                      </Badge>
-                    </TableCell>
+                {sessions.map((sess) => {
+                  const fase = getFaseMacro(sess);
+                  return (
+                    <TableRow
+                      key={sess.sessionId}
+                      className="cursor-pointer hover:bg-slate-50 transition-colors"
+                      onClick={() => setSelectedSession(sess)}
+                    >
+                      <TableCell className="py-4">
+                        <p className="text-sm font-mono text-indigo-600 font-bold">
+                          {sess.sessionId}
+                        </p>
+                        <p className="text-sm font-bold text-slate-900 mt-0.5">
+                          {sess.ultimoAvance?.empresa?.razonSocial ||
+                            "Sin Nombre"}
+                        </p>
+                      </TableCell>
 
-                    <TableCell>
-                      <div className="flex flex-col gap-1.5 items-start">
-                        {sess.workflow === "lead" && (
-                          <Badge
-                            variant="secondary"
-                            className="text-[10px] bg-slate-100 text-slate-600 hover:bg-slate-200 mb-1"
-                          >
-                            Prospecto (Lead)
-                          </Badge>
-                        )}
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={`text-xs py-1 px-2.5 shadow-sm font-semibold gap-1.5 ${fase.color}`}
+                        >
+                          <fase.icon className="h-3.5 w-3.5" /> {fase.label}
+                        </Badge>
+                      </TableCell>
 
-                        {sess.status === "active" && (
-                          <Badge
-                            variant="outline"
-                            className="text-[9px] h-4 px-1.5 bg-slate-50 text-slate-500 border-slate-200"
-                          >
-                            <Clock className="h-2.5 w-2.5 mr-1" /> Esperando al
-                            Cliente
-                          </Badge>
-                        )}
-                        {sess.status === "completed_by_client" && (
-                          <Badge
-                            variant="outline"
-                            className="text-[9px] h-4 px-1.5 bg-blue-50 text-blue-700 border-blue-200"
-                          >
-                            <ShieldCheck className="h-2.5 w-2.5 mr-1 animate-pulse" />{" "}
-                            Por Validar (SAC)
-                          </Badge>
-                        )}
-                        {sess.status === "corrections_requested" && (
-                          <Badge
-                            variant="outline"
-                            className="text-[9px] h-4 px-1.5 bg-orange-50 text-orange-700 border-orange-200"
-                          >
-                            <AlertTriangle className="h-2.5 w-2.5 mr-1" /> En
-                            Corrección
-                          </Badge>
-                        )}
-                        {sess.status === "approved" && (
-                          <Badge
-                            variant="outline"
-                            className="text-[9px] h-4 px-1.5 bg-emerald-50 text-emerald-700 border-emerald-200"
-                          >
-                            <Check className="h-2.5 w-2.5 mr-1" /> Expediente
-                            Cerrado
-                          </Badge>
-                        )}
-                        {sess.status === "expired" && (
-                          <Badge
-                            variant="outline"
-                            className="text-[9px] h-4 px-1.5 bg-red-50 text-red-700 border-red-200"
-                          >
-                            <XCircle className="h-2.5 w-2.5 mr-1" /> Enlace
-                            Vencido
-                          </Badge>
-                        )}
+                      <TableCell>
+                        <div className="flex flex-col gap-2 items-start">
+                          {sess.status === "active" && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs py-1 px-2 bg-slate-50 text-slate-600 border-slate-300"
+                            >
+                              <Clock className="h-3 w-3 mr-1.5" /> Esperando al
+                              Cliente
+                            </Badge>
+                          )}
+                          {sess.status === "completed_by_client" && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs py-1 px-2 bg-blue-50 text-blue-700 border-blue-200"
+                            >
+                              <ShieldCheck className="h-3 w-3 mr-1.5 animate-pulse" />{" "}
+                              Por Validar (SAC)
+                            </Badge>
+                          )}
+                          {sess.status === "corrections_requested" && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs py-1 px-2 bg-orange-50 text-orange-700 border-orange-200"
+                            >
+                              <AlertTriangle className="h-3 w-3 mr-1.5" /> En
+                              Corrección
+                            </Badge>
+                          )}
+                          {sess.status === "approved" && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs py-1 px-2 bg-emerald-50 text-emerald-700 border-emerald-200"
+                            >
+                              <Check className="h-3 w-3 mr-1.5" /> Expediente
+                              Cerrado
+                            </Badge>
+                          )}
+                          {sess.status === "expired" && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs py-1 px-2 bg-red-50 text-red-700 border-red-200"
+                            >
+                              <XCircle className="h-3 w-3 mr-1.5" /> Enlace
+                              Vencido
+                            </Badge>
+                          )}
 
-                        {sess.crmProspectId ? (
-                          <Badge
-                            variant="outline"
-                            className="text-[9px] h-4 px-1.5 bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1"
-                          >
-                            <Database className="h-2.5 w-2.5" />{" "}
-                            {sess.crmProspectId}
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="text-[9px] h-4 px-1.5 bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1"
-                          >
-                            <Database className="h-2.5 w-2.5" /> Pendiente CRM
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
+                          {sess.crmProspectId ? (
+                            <Badge
+                              variant="outline"
+                              className="text-xs py-1 px-2 bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1.5"
+                            >
+                              <Database className="h-3 w-3" />{" "}
+                              {sess.crmProspectId}
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="text-xs py-1 px-2 bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1.5"
+                            >
+                              <Database className="h-3 w-3" /> Pendiente CRM
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
 
-                    <TableCell className="text-right space-x-2 flex justify-end items-center h-full">
-                      {sess.status !== "completed_by_client" &&
-                        sess.status !== "approved" && (
-                          <Button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onReactivateSession(sess.sessionId);
-                            }}
-                            size="sm"
-                            variant="outline"
-                            className={`text-[10px] gap-1 h-7 border-indigo-200 text-indigo-600 hover:bg-indigo-50 ${sess.status === "expired" ? "border-red-300 text-red-600 hover:bg-red-50" : ""}`}
-                          >
-                            <RefreshCw className="h-3 w-3" />{" "}
-                            {sess.status === "expired"
-                              ? "Reactivar Vencido"
-                              : "+3 Días"}
-                          </Button>
-                        )}
+                      <TableCell>
+                        <Badge
+                          variant="secondary"
+                          className="text-xs py-1 px-2.5 bg-slate-100 text-slate-700 font-medium"
+                        >
+                          {Array.isArray(sess.configComercial) &&
+                          sess.configComercial.length > 0
+                            ? sess.configComercial[0].unidadNegocio
+                            : "No Definida"}
+                        </Badge>
+                      </TableCell>
 
-                      {sess.workflow === "lead" &&
-                        sess.status === "completed_by_client" &&
-                        sess.crmProspectId && (
-                          <Button
-                            onClick={(e) =>
-                              handleSafePromoteToOnboarding(sess.sessionId, e)
-                            }
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] gap-1 h-7"
-                          >
-                            <ArrowUpRight className="h-3 w-3" /> Promover a
-                            Onboarding
-                          </Button>
-                        )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      <TableCell className="text-right">
+                        <div className="flex justify-end items-center gap-2 h-full">
+                          {/* BOTÓN VER CLIENTE (Solo si está aprobado) */}
+                          {sess.status === "approved" && (
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedSession(sess);
+                                setIsFullDetailsOpen(true);
+                              }}
+                              size="sm"
+                              className="bg-slate-900 hover:bg-slate-800 text-white text-xs gap-1.5 h-8 shadow-sm"
+                            >
+                              <Eye className="h-3.5 w-3.5" /> Ver Cliente
+                            </Button>
+                          )}
+
+                          {/* BOTÓN OPERATIVO: REACTIVAR ENLACE */}
+                          {sess.status !== "completed_by_client" &&
+                            sess.status !== "approved" && (
+                              <Button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onReactivateSession(sess.sessionId);
+                                }}
+                                size="sm"
+                                disabled={sess.status !== "expired"} // Solo se activa si está vencido
+                                variant={
+                                  sess.status === "expired"
+                                    ? "default"
+                                    : "outline"
+                                }
+                                className={`text-xs gap-1.5 h-8 transition-all ${
+                                  sess.status === "expired"
+                                    ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-md border-0"
+                                    : "bg-slate-50 border-slate-200 text-slate-400 shadow-none cursor-not-allowed opacity-70"
+                                }`}
+                              >
+                                <RefreshCw
+                                  className={`h-3.5 w-3.5 ${sess.status === "expired" ? "animate-pulse" : ""}`}
+                                />{" "}
+                                {sess.status === "expired"
+                                  ? "Reactivar Enlace"
+                                  : "Enlace Vigente"}
+                              </Button>
+                            )}
+
+                          {/* BOTÓN OPERATIVO: PROMOVER A ONBOARDING */}
+                          {sess.workflow === "lead" &&
+                            sess.status === "completed_by_client" &&
+                            sess.crmProspectId && (
+                              <Button
+                                onClick={(e) =>
+                                  handleSafePromoteToOnboarding(
+                                    sess.sessionId,
+                                    e,
+                                  )
+                                }
+                                size="sm"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5 h-8 shadow-sm"
+                              >
+                                <ArrowUpRight className="h-3.5 w-3.5" />{" "}
+                                Promover a Onboarding
+                              </Button>
+                            )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </Card>
@@ -466,16 +529,16 @@ export function SacWorkspace({
             <Table>
               <TableHeader className="bg-slate-50">
                 <TableRow>
-                  <TableHead className="text-xs font-semibold">
+                  <TableHead className="text-sm font-bold text-slate-700">
                     Fecha y Hora
                   </TableHead>
-                  <TableHead className="text-xs font-semibold">
+                  <TableHead className="text-sm font-bold text-slate-700">
                     Usuario
                   </TableHead>
-                  <TableHead className="text-xs font-semibold">
+                  <TableHead className="text-sm font-bold text-slate-700">
                     Acción Registrada
                   </TableHead>
-                  <TableHead className="text-xs font-semibold text-right">
+                  <TableHead className="text-sm font-bold text-slate-700 text-right">
                     Resultado
                   </TableHead>
                 </TableRow>
@@ -485,19 +548,19 @@ export function SacWorkspace({
                   .flatMap((s) => s.auditLogs)
                   .map((log) => (
                     <TableRow key={log.id}>
-                      <TableCell className="text-xs font-mono text-slate-600">
+                      <TableCell className="text-sm font-mono text-slate-600">
                         {log.fechaHora}
                       </TableCell>
-                      <TableCell className="text-xs font-semibold text-slate-800">
+                      <TableCell className="text-sm font-semibold text-slate-800">
                         {log.usuario}
                       </TableCell>
-                      <TableCell className="text-xs text-slate-700">
+                      <TableCell className="text-sm text-slate-700">
                         {log.accion}
                       </TableCell>
                       <TableCell className="text-right">
                         <Badge
                           variant="outline"
-                          className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]"
+                          className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs"
                         >
                           {log.resultado}
                         </Badge>
@@ -542,7 +605,7 @@ export function SacWorkspace({
               <div className="space-y-3">
                 <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-1">
                   <Link2 className="h-4 w-4 text-indigo-500" /> Enlace del
-                  Cliente (Magic Link)
+                  Cliente
                 </h4>
                 <div className="flex gap-2">
                   <Input
@@ -571,6 +634,8 @@ export function SacWorkspace({
                       {currentSession.fechaExpiracion}
                     </strong>
                   </p>
+
+                  {/* BOTÓN REACTIVAR EN PANEL LATERAL (También actualizado) */}
                   {currentSession.status !== "completed_by_client" &&
                     currentSession.status !== "approved" && (
                       <Button
@@ -578,17 +643,22 @@ export function SacWorkspace({
                           onReactivateSession(currentSession.sessionId)
                         }
                         size="sm"
+                        disabled={currentSession.status !== "expired"}
                         variant={
                           currentSession.status === "expired"
                             ? "default"
                             : "outline"
                         }
-                        className={`h-6 text-[10px] gap-1 ${currentSession.status === "expired" ? "bg-indigo-600 hover:bg-indigo-700 text-white" : "text-indigo-600 border-indigo-200 hover:bg-indigo-50"}`}
+                        className={`h-6 text-[10px] gap-1 transition-all ${
+                          currentSession.status === "expired"
+                            ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm border-0"
+                            : "bg-slate-50 border-slate-200 text-slate-400 shadow-none cursor-not-allowed opacity-70"
+                        }`}
                       >
                         <RefreshCw className="h-3 w-3" />{" "}
                         {currentSession.status === "expired"
-                          ? "Reactivar Enlace"
-                          : "Extender (+3 Días)"}
+                          ? "Reactivar (+3 Días)"
+                          : "Enlace Vigente"}
                       </Button>
                     )}
                 </div>
@@ -771,11 +841,11 @@ export function SacWorkspace({
             <CardHeader className="bg-slate-50 border-b border-slate-200 flex-none shrink-0 py-4 px-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-lg text-slate-900 flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-indigo-600" /> Expediente
-                    Completo
+                  <CardTitle className="text-xl text-slate-900 flex items-center gap-2">
+                    <FileText className="h-6 w-6 text-indigo-600" /> Expediente
+                    Cliente / Prospecto
                   </CardTitle>
-                  <p className="text-xs text-slate-500 mt-1 font-mono">
+                  <p className="text-sm text-slate-500 mt-1 font-mono font-medium">
                     {currentSession.sessionId} -{" "}
                     {currentSession.ultimoAvance?.empresa?.razonSocial}
                   </p>
@@ -786,11 +856,64 @@ export function SacWorkspace({
                   onClick={() => setIsFullDetailsOpen(false)}
                   className="text-slate-400 hover:bg-slate-200 rounded-full"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-6 w-6" />
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+              {/* NUEVA SECCIÓN: CONFIGURACIÓN COMERCIAL SAC */}
+              {currentSession.configComercial &&
+                Array.isArray(currentSession.configComercial) &&
+                currentSession.configComercial.length > 0 && (
+                  <div className="mb-6 bg-indigo-50/70 p-5 rounded-xl border border-indigo-100 shadow-sm space-y-4">
+                    <h4 className="font-bold text-indigo-900 flex items-center gap-2 border-b border-indigo-200/60 pb-2 text-sm">
+                      <Briefcase className="h-4 w-4 text-indigo-600" />{" "}
+                      Parámetros CRM (Configurado por SAC)
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                      <div>
+                        <span className="text-slate-500 block mb-0.5 font-medium">
+                          Unidad de Negocio:
+                        </span>
+                        <Badge
+                          variant="secondary"
+                          className="bg-white border-slate-200 text-indigo-900 font-semibold"
+                        >
+                          {currentSession.configComercial[0].unidadNegocio ||
+                            "N/A"}
+                        </Badge>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block mb-0.5 font-medium">
+                          Tipo de Cliente:
+                        </span>
+                        <p className="font-semibold text-slate-900">
+                          {currentSession.configComercial[0].tipoCliente ||
+                            "N/A"}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block mb-0.5 font-medium">
+                          Org. de Ventas:
+                        </span>
+                        <p className="font-semibold text-slate-900">
+                          {currentSession.configComercial[0]
+                            .organizacionVentas || "N/A"}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block mb-0.5 font-medium">
+                          Canal y División:
+                        </span>
+                        <p className="font-semibold text-slate-900">
+                          {currentSession.configComercial[0].canalDistribucion}{" "}
+                          / {currentSession.configComercial[0].division}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
                 <div className="space-y-6">
                   <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
@@ -800,19 +923,19 @@ export function SacWorkspace({
                     </h4>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
-                        <span className="text-slate-500">Razón Social:</span>{" "}
+                        <span className="text-slate-500">Razón Social:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.empresa?.razonSocial}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">RFC:</span>{" "}
+                        <span className="text-slate-500">RFC:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.empresa?.rfc}
                         </p>
                       </div>
                       <div className="col-span-2">
-                        <span className="text-slate-500">Régimen Fiscal:</span>{" "}
+                        <span className="text-slate-500">Régimen Fiscal:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.empresa
                             ?.regimenFiscal || "No especificado"}
@@ -830,7 +953,7 @@ export function SacWorkspace({
                       <div className="col-span-2">
                         <span className="text-slate-500">
                           Representante Legal:
-                        </span>{" "}
+                        </span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.contacto
                             ?.nombreRepresentante || "No especificado"}
@@ -839,7 +962,7 @@ export function SacWorkspace({
                       <div>
                         <span className="text-slate-500">
                           Correo Electrónico:
-                        </span>{" "}
+                        </span>
                         <p className="font-semibold text-slate-900">
                           {
                             currentSession.ultimoAvance?.contacto
@@ -848,7 +971,7 @@ export function SacWorkspace({
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">Teléfono:</span>{" "}
+                        <span className="text-slate-500">Teléfono:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.contacto
                             ?.telefonoContacto || "No especificado"}
@@ -864,42 +987,42 @@ export function SacWorkspace({
                     </h4>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="col-span-2">
-                        <span className="text-slate-500">Calle:</span>{" "}
+                        <span className="text-slate-500">Calle:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.direccionFiscal
                             ?.calle || "No especificado"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">Num. Exterior:</span>{" "}
+                        <span className="text-slate-500">Num. Exterior:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.direccionFiscal
                             ?.numeroExterior || "N/A"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">Código Postal:</span>{" "}
+                        <span className="text-slate-500">Código Postal:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.direccionFiscal
                             ?.codigoPostal || "N/A"}
                         </p>
                       </div>
                       <div className="col-span-2">
-                        <span className="text-slate-500">Colonia:</span>{" "}
+                        <span className="text-slate-500">Colonia:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.direccionFiscal
                             ?.colonia || "No especificado"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">Municipio:</span>{" "}
+                        <span className="text-slate-500">Municipio:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.direccionFiscal
                             ?.municipio || "No especificado"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">Estado:</span>{" "}
+                        <span className="text-slate-500">Estado:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.direccionFiscal
                             ?.estado || "No especificado"}
@@ -917,7 +1040,7 @@ export function SacWorkspace({
                     </h4>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
-                        <span className="text-slate-500">Banco:</span>{" "}
+                        <span className="text-slate-500">Banco:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.facturacion?.banco ||
                             "No especificado"}
@@ -926,21 +1049,21 @@ export function SacWorkspace({
                       <div>
                         <span className="text-slate-500">
                           Últimos 4 dígitos:
-                        </span>{" "}
+                        </span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.facturacion
                             ?.cuenta4Digitos || "No especificado"}
                         </p>
                       </div>
                       <div className="col-span-2">
-                        <span className="text-slate-500">Forma de Pago:</span>{" "}
+                        <span className="text-slate-500">Forma de Pago:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.facturacion
                             ?.formaPago || "No especificado"}
                         </p>
                       </div>
                       <div className="col-span-2">
-                        <span className="text-slate-500">Método de Pago:</span>{" "}
+                        <span className="text-slate-500">Método de Pago:</span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.facturacion
                             ?.metodoPago || "No especificado"}
@@ -949,7 +1072,7 @@ export function SacWorkspace({
                       <div className="col-span-2">
                         <span className="text-slate-500">
                           Correo para Facturas:
-                        </span>{" "}
+                        </span>
                         <p className="font-semibold text-slate-900">
                           {currentSession.ultimoAvance?.facturacion
                             ?.correoFacturas || "No especificado"}
@@ -961,18 +1084,12 @@ export function SacWorkspace({
                   <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                       <h4 className="font-bold text-slate-900 flex items-center gap-1.5">
-                        <Truck className="h-4 w-4 text-indigo-500" />
+                        <Truck className="h-4 w-4 text-indigo-500" />{" "}
                         Destinatarios de Mercancía (
                         {currentSession.ultimoAvance?.direccionesEntrega
                           ?.length || 0}
                         )
                       </h4>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] bg-slate-50 border-slate-200"
-                      >
-                        Rol CRM: Ship-To Party
-                      </Badge>
                     </div>
 
                     {currentSession.ultimoAvance?.direccionesEntrega &&
@@ -993,39 +1110,6 @@ export function SacWorkspace({
                                   {planta.nombrePlanta ||
                                     `Planta / Bodega ${idx + 1}`}
                                 </span>
-
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant={
-                                    planta.validada ? "outline" : "default"
-                                  }
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveAlert({
-                                      type: "validate_planta",
-                                      sessionId: currentSession.sessionId,
-                                      plantaIndex: idx,
-                                    });
-                                  }}
-                                  className={`h-7 text-[11px] gap-1 px-2.5 transition-all ${
-                                    planta.validada
-                                      ? "border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
-                                      : "bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
-                                  }`}
-                                >
-                                  {planta.validada ? (
-                                    <>
-                                      <Check className="h-3 w-3 text-emerald-600" />{" "}
-                                      Ubicación Validada
-                                    </>
-                                  ) : (
-                                    <>
-                                      <ShieldCheck className="h-3 w-3" />{" "}
-                                      Validar Ubicación
-                                    </>
-                                  )}
-                                </Button>
                               </div>
 
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-600 pt-1 border-t border-slate-100">
@@ -1057,11 +1141,6 @@ export function SacWorkspace({
                                     {planta.telefonoRecepcion ||
                                       "No especificado"}
                                   </p>
-                                  {planta.horarioRecepcion && (
-                                    <p className="text-[11px] text-indigo-600 mt-1 italic">
-                                      Horario: {planta.horarioRecepcion}
-                                    </p>
-                                  )}
                                 </div>
                               </div>
 
@@ -1107,7 +1186,6 @@ export function SacWorkspace({
         </div>
       )}
 
-      {/* MODAL DE ALERTAS NORMAL */}
       {activeAlert && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4 animate-in fade-in">
           <Card className="max-w-md w-full bg-white shadow-2xl border-0 overflow-hidden animate-in zoom-in-95">
@@ -1141,7 +1219,6 @@ export function SacWorkspace({
                     Selecciona las secciones que el cliente debe corregir. El
                     enlace se reactivará automáticamente.
                   </p>
-
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                       1. Seleccionar Secciones
@@ -1155,14 +1232,9 @@ export function SacWorkspace({
                             key={opt.id}
                             type="button"
                             onClick={() => toggleCorrectionSection(opt.id)}
-                            className={`flex items-center gap-2 p-2 rounded-md border text-xs text-left transition-colors ${
-                              isSelected
-                                ? "bg-red-50 border-red-200 text-red-700 font-semibold"
-                                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                            }`}
+                            className={`flex items-center gap-2 p-2 rounded-md border text-xs text-left transition-colors ${isSelected ? "bg-red-50 border-red-200 text-red-700 font-semibold" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
                           >
-                            <opt.icon className="h-3.5 w-3.5" />
-                            {opt.label}
+                            <opt.icon className="h-3.5 w-3.5" /> {opt.label}
                           </button>
                         );
                       })}
@@ -1204,7 +1276,6 @@ export function SacWorkspace({
                     : `¿Deseas confirmar esta acción para la sesión ${activeAlert.sessionId}?`}
                 </p>
               )}
-
               <div className="flex justify-end gap-3 mt-6 pt-2">
                 <Button variant="outline" onClick={() => setActiveAlert(null)}>
                   Cancelar
