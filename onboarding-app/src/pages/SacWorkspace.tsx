@@ -55,7 +55,6 @@ interface SacWorkspaceProps {
 
 type AlertActionType =
   | "sync"
-  | "promote"
   | "approve"
   | "correct"
   | "validate_planta"
@@ -63,7 +62,6 @@ type AlertActionType =
 
 export function SacWorkspace({
   sessions,
-  onPromoteToOnboarding,
   onSyncSessionToCRM,
   onApproveSession,
   onReactivateSession,
@@ -86,7 +84,8 @@ export function SacWorkspace({
 
   const [isFullDetailsOpen, setIsFullDetailsOpen] = useState(false);
 
-  // NUEVO ESTADO: Mapa de correcciones { "empresa": "Falta RFC", "documentos": "Borroso" }
+  // ESTADO PARA CORRECCIONES
+  const [correctionSections, setCorrectionSections] = useState<string[]>([]);
   const [correctionNotesMap, setCorrectionNotesMap] = useState<
     Record<string, string>
   >({});
@@ -145,20 +144,24 @@ export function SacWorkspace({
 
   const handleSafeSyncToCRM = (sessionId: string) =>
     setActiveAlert({ type: "sync", sessionId });
+
+  const handleSafeApproveSession = (sessionId: string) =>
+    setActiveAlert({ type: "approve", sessionId });
+
+  const handleSafeRequestCorrections = (sessionId: string) => {
+    setCorrectionNotesMap({});
+    setActiveAlert({ type: "correct", sessionId });
+  };
+
+  // NAVEGACIÓN DIRECTA A LA PANTALLA DE NUEVA SESIÓN
   const handleSafePromoteToOnboarding = (
     sessionId: string,
     e?: React.MouseEvent,
   ) => {
     if (e) e.stopPropagation();
-    setActiveAlert({ type: "promote", sessionId });
-  };
-  const handleSafeApproveSession = (sessionId: string) =>
-    setActiveAlert({ type: "approve", sessionId });
-
-  // Al abrir el modal de correcciones, limpiamos el mapa
-  const handleSafeRequestCorrections = (sessionId: string) => {
-    setCorrectionNotesMap({});
-    setActiveAlert({ type: "correct", sessionId });
+    navigate(`/sac/nueva-sesion?promover=${sessionId}`, {
+      state: { promoteSessionId: sessionId },
+    });
   };
 
   const CORRECTION_OPTIONS = [
@@ -169,20 +172,18 @@ export function SacWorkspace({
     { id: "documentos", label: "Documentos Adjuntos", icon: FileText },
   ];
 
-  // NUEVA LÓGICA: Toggle del mapa de correcciones
   const toggleCorrectionSection = (sectionId: string) => {
     setCorrectionNotesMap((prev) => {
       const newMap = { ...prev };
       if (newMap[sectionId] !== undefined) {
-        delete newMap[sectionId]; // Si ya existe, lo quitamos (lo deselecciona)
+        delete newMap[sectionId];
       } else {
-        newMap[sectionId] = ""; // Si no existe, lo agregamos vacío
+        newMap[sectionId] = "";
       }
       return newMap;
     });
   };
 
-  // NUEVA LÓGICA: Actualizar el texto individual
   const updateCorrectionNote = (sectionId: string, note: string) => {
     setCorrectionNotesMap((prev) => ({
       ...prev,
@@ -196,9 +197,6 @@ export function SacWorkspace({
       case "sync":
         onSyncSessionToCRM(activeAlert.sessionId);
         break;
-      case "promote":
-        onPromoteToOnboarding(activeAlert.sessionId);
-        break;
       case "approve":
         onApproveSession(activeAlert.sessionId);
         break;
@@ -208,7 +206,6 @@ export function SacWorkspace({
             .from("sessions")
             .update({
               status: "corrections_requested",
-              // Convertimos el diccionario a un texto JSON para guardarlo
               notas_correccion: JSON.stringify(correctionNotesMap),
             })
             .eq("session_id", activeAlert.sessionId);
@@ -219,7 +216,6 @@ export function SacWorkspace({
           console.error("Error al actualizar estado a corrección:", err);
         }
 
-        // Ejecutamos prop pasandole todo junto (para futuros correos)
         onRequestCorrections(
           activeAlert.sessionId,
           Object.keys(correctionNotesMap),
@@ -447,10 +443,9 @@ export function SacWorkspace({
                         sess.status === "completed_by_client" &&
                         sess.crmProspectId && (
                           <Button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSafePromoteToOnboarding(sess.sessionId);
-                            }}
+                            onClick={(e) =>
+                              handleSafePromoteToOnboarding(sess.sessionId, e)
+                            }
                             size="sm"
                             className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] gap-1 h-7"
                           >
@@ -636,7 +631,6 @@ export function SacWorkspace({
                 )}
               </div>
 
-              {/* RESUMEN DE DATOS SIEMPRE VISIBLE */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-1">
                   <h4 className="font-semibold text-slate-900 flex items-center gap-1.5">
@@ -675,7 +669,6 @@ export function SacWorkspace({
                 </div>
               </div>
 
-              {/* RESOLUCIONES SAC: Depende del Carril (Lead vs Onboarding) */}
               {(currentSession.status === "completed_by_client" ||
                 currentSession.status === "corrections_requested") && (
                 <div className="space-y-3 pt-4 border-t border-slate-100">
@@ -706,9 +699,10 @@ export function SacWorkspace({
                       </p>
                       <Button
                         disabled={!currentSession.crmProspectId}
-                        onClick={() =>
+                        onClick={(e) =>
                           handleSafePromoteToOnboarding(
                             currentSession.sessionId,
+                            e,
                           )
                         }
                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-xs gap-1.5 shadow-sm"
@@ -1113,16 +1107,16 @@ export function SacWorkspace({
         </div>
       )}
 
-      {/* MODAL DE ALERTAS PERSONALIZADO */}
+      {/* MODAL DE ALERTAS NORMAL */}
       {activeAlert && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4 animate-in fade-in">
           <Card className="max-w-md w-full bg-white shadow-2xl border-0 overflow-hidden animate-in zoom-in-95">
             <CardHeader
-              className={`border-b border-slate-100 pb-4 ${activeAlert.type === "approve" ? "bg-amber-50" : ""} ${activeAlert.type === "correct" ? "bg-red-50" : ""} ${activeAlert.type === "sync" || activeAlert.type === "promote" ? "bg-slate-50" : ""} ${activeAlert.type === "validate_planta" ? "bg-indigo-50" : ""}`}
+              className={`border-b border-slate-100 pb-4 ${activeAlert.type === "approve" ? "bg-amber-50" : ""} ${activeAlert.type === "correct" ? "bg-red-50" : ""} ${activeAlert.type === "sync" ? "bg-slate-50" : ""} ${activeAlert.type === "validate_planta" ? "bg-indigo-50" : ""}`}
             >
               <div className="flex items-center gap-3">
                 <div
-                  className={`p-2 rounded-full ${activeAlert.type === "approve" ? "bg-amber-100 text-amber-600" : ""} ${activeAlert.type === "correct" ? "bg-red-100 text-red-600" : ""} ${activeAlert.type === "sync" || activeAlert.type === "promote" || activeAlert.type === "validate_planta" ? "bg-indigo-100 text-indigo-600" : ""}`}
+                  className={`p-2 rounded-full ${activeAlert.type === "approve" ? "bg-amber-100 text-amber-600" : ""} ${activeAlert.type === "correct" ? "bg-red-100 text-red-600" : ""} ${activeAlert.type === "sync" || activeAlert.type === "validate_planta" ? "bg-indigo-100 text-indigo-600" : ""}`}
                 >
                   {activeAlert.type === "validate_planta" ? (
                     <ShieldCheck className="h-5 w-5" />
@@ -1132,7 +1126,6 @@ export function SacWorkspace({
                 </div>
                 <CardTitle className="text-base text-slate-900">
                   {activeAlert.type === "sync" && "Generar Prospecto en CRM"}
-                  {activeAlert.type === "promote" && "Promover a Onboarding"}
                   {activeAlert.type === "approve" && "Aprobar & Enriquecer CRM"}
                   {activeAlert.type === "validate_planta" &&
                     "Validar Ubicación de Entrega"}

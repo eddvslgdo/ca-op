@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -56,16 +56,26 @@ const defaultSalesArea = {
 export function CreateSessionPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const promoteSessionId = searchParams.get("promote");
+  const location = useLocation();
+
+  // LEEMOS EL ID INFALIBLEMENTE (ya sea por URL o por estado interno)
+  const promoteSessionId =
+    location.state?.promoteSessionId ||
+    searchParams.get("promover") ||
+    searchParams.get("promote");
 
   const [pageStep, setPageStep] = useState<"form" | "loading" | "success">(
     "form",
   );
   const [copiedCustom, setCopiedCustom] = useState(false);
-  const [workflow, setWorkflow] = useState<SessionWorkflow>("lead");
 
-  const [isTaxesExpanded, setIsTaxesExpanded] = useState(true);
-  const [isCrmExpanded, setIsCrmExpanded] = useState(true);
+  // SI ES PROMOCIÓN, BLOQUEAMOS EL FLUJO A ONBOARDING INMEDIATAMENTE
+  const [workflow, setWorkflow] = useState<SessionWorkflow>(
+    promoteSessionId ? "onboarding" : "lead",
+  );
+
+  const [isTaxesExpanded, setIsTaxesExpanded] = useState(!!promoteSessionId);
+  const [isCrmExpanded, setIsCrmExpanded] = useState(!!promoteSessionId);
 
   const [contactEmail, setContactEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -129,6 +139,8 @@ export function CreateSessionPage() {
 
       if (data) {
         setWorkflow("onboarding");
+        setIsCrmExpanded(true);
+        setIsTaxesExpanded(true);
         setContactEmail(data.ultimo_avance?.contacto?.correoContacto || "");
         setPhoneNumber(data.ultimo_avance?.contacto?.telefonoContacto || "");
 
@@ -341,6 +353,7 @@ export function CreateSessionPage() {
           .from("sessions")
           .update({
             workflow: "onboarding",
+            status: "active",
             config_comercial: configComercialFinal,
             token: highEntropyToken,
             expires_at: expiresAt.toISOString(),
@@ -438,73 +451,20 @@ export function CreateSessionPage() {
       )}
 
       <Card className="max-w-[850px] w-full bg-white shadow-sm border-slate-200 rounded-lg overflow-hidden">
-        {pageStep === "form" && (
-          <CardHeader
-            className={`border-b px-8 py-6 ${promoteSessionId ? "bg-amber-50 border-amber-100" : "bg-white border-slate-100"}`}
-          >
+        {pageStep === "form" && !promoteSessionId && (
+          <CardHeader className="bg-white border-b border-slate-100 px-8 py-6">
             <div className="flex items-start gap-4">
-              <div
-                className={`p-3 rounded-md border shrink-0 mt-1 ${promoteSessionId ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-indigo-50 text-indigo-600 border-indigo-100"}`}
-              >
-                {promoteSessionId ? (
-                  <RefreshCw className="h-6 w-6" />
-                ) : (
-                  <FileText className="h-6 w-6" />
-                )}
+              <div className="p-3 rounded-md border shrink-0 mt-1 bg-indigo-50 text-indigo-600 border-indigo-100">
+                <FileText className="h-6 w-6" />
               </div>
               <div className="w-full">
-                {/* --- NUEVA CABECERA ENRIQUECIDA PARA LA PROMOCIÓN --- */}
-                {promoteSessionId && existingAvance ? (
-                  <div className="space-y-3">
-                    <div>
-                      <CardTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                        Promover a Onboarding
-                      </CardTitle>
-                      <CardDescription className="text-sm text-slate-700 mt-1">
-                        Configura los parámetros de venta CRM. La información
-                        que el cliente ya capturó se conservará.
-                      </CardDescription>
-                    </div>
-
-                    <div className="bg-white/60 border border-amber-200/60 p-3 rounded-md grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-[10px] text-amber-700 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
-                          <Building2 className="h-3 w-3" /> Datos de Empresa
-                        </p>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {existingAvance.empresa?.razonSocial ||
-                            "Empresa en captura"}
-                        </p>
-                        <p className="text-xs text-slate-600 font-mono mt-0.5">
-                          RFC: {existingAvance.empresa?.rfc || "Pendiente"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-amber-700 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
-                          <User className="h-3 w-3" /> Contacto Principal
-                        </p>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {existingAvance.contacto?.nombreRepresentante ||
-                            "Nombre pendiente"}
-                        </p>
-                        <p className="text-xs text-slate-600 mt-0.5">
-                          ID Sesión:{" "}
-                          <span className="font-mono">{promoteSessionId}</span>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <CardTitle className="text-lg font-bold text-slate-900">
-                      Crear Nueva Sesión de Registro
-                    </CardTitle>
-                    <CardDescription className="text-xs text-slate-500 mt-0.5">
-                      Asignación de credenciales y parámetros CRM para cliente
-                      externo.
-                    </CardDescription>
-                  </>
-                )}
+                <CardTitle className="text-lg font-bold text-slate-900">
+                  Crear Nueva Sesión de Registro
+                </CardTitle>
+                <CardDescription className="text-xs text-slate-500 mt-0.5">
+                  Asignación de credenciales y parámetros CRM para cliente
+                  externo.
+                </CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -516,9 +476,75 @@ export function CreateSessionPage() {
               onSubmit={handleCreateSession}
               className="space-y-8 animate-in fade-in"
             >
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  {!promoteSessionId && (
+              {/* --- LÓGICA DIVIDIDA: VISTA PROMOCIÓN vs VISTA CREACIÓN --- */}
+              {promoteSessionId ? (
+                <div className="space-y-6">
+                  {/* BANNER RÁPIDO DE PROMOCIÓN */}
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-5 flex flex-col md:flex-row justify-between md:items-center gap-4 shadow-sm">
+                    <div>
+                      <Badge className="bg-emerald-600 mb-2 border-0">
+                        Modo Promoción a Onboarding
+                      </Badge>
+                      <h2 className="text-xl font-bold text-emerald-950">
+                        {existingAvance?.empresa?.razonSocial ||
+                          "Cargando empresa..."}
+                      </h2>
+                      <p className="text-sm text-emerald-700 font-mono mt-1">
+                        ID: {promoteSessionId}
+                      </p>
+                    </div>
+                    <div className="bg-white p-3 rounded-md border border-emerald-100 text-sm shadow-sm">
+                      <p className="font-semibold text-slate-800">
+                        {contactEmail || "Sin correo"}
+                      </p>
+                      <p className="text-slate-500 text-xs">
+                        {phoneNumber || "Sin teléfono"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* PARÁMETROS COMERCIALES INICIALES */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 pt-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-semibold text-slate-800">
+                        Unidad de Negocio{" "}
+                        <span className="text-red-500">*</span>
+                      </Label>
+                      <select
+                        className="flex h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:ring-indigo-600"
+                        value={unidadNegocio}
+                        onChange={(e) => setUnidadNegocio(e.target.value)}
+                      >
+                        {unidadesNegocio.map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-semibold text-slate-800">
+                        Tipo de Cliente
+                      </Label>
+                      <select
+                        className="flex h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:ring-indigo-600"
+                        value={tipoCliente}
+                        onChange={(e) => setTipoCliente(e.target.value)}
+                      >
+                        <option value="">Selecciona...</option>
+                        {tiposCliente.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* FORMULARIO ESTÁNDAR PARA NUEVA SESIÓN */}
+                  <div className="grid grid-cols-2 gap-4">
                     <div
                       onClick={() => {
                         setWorkflow("lead");
@@ -536,88 +562,87 @@ export function CreateSessionPage() {
                         Recopilación de información básica.
                       </p>
                     </div>
-                  )}
-                  <div
-                    onClick={() => {
-                      if (!promoteSessionId) {
+                    <div
+                      onClick={() => {
                         setWorkflow("onboarding");
                         setIsCrmExpanded(true);
                         setIsTaxesExpanded(true);
-                      }
-                    }}
-                    className={`relative p-4 rounded-md border transition-all ${promoteSessionId ? "col-span-2 border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600 cursor-default" : workflow === "onboarding" ? "border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600 cursor-pointer" : "border-slate-200 bg-white hover:border-emerald-300 cursor-pointer"}`}
-                  >
-                    <p
-                      className={`font-semibold text-sm mb-0.5 ${workflow === "onboarding" ? "text-emerald-900" : "text-slate-900"}`}
+                      }}
+                      className={`relative p-4 rounded-md border transition-all ${workflow === "onboarding" ? "border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600 cursor-pointer" : "border-slate-200 bg-white hover:border-emerald-300 cursor-pointer"}`}
                     >
-                      Onboarding Completo
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Expediente fiscal y configuración CRM requerida.
-                    </p>
+                      <p
+                        className={`font-semibold text-sm mb-0.5 ${workflow === "onboarding" ? "text-emerald-900" : "text-slate-900"}`}
+                      >
+                        Onboarding Completo
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Expediente fiscal y configuración CRM requerida.
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold text-slate-800">
-                      Correo Electrónico <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      type="email"
-                      value={contactEmail}
-                      onChange={(e) => setContactEmail(e.target.value)}
-                      required
-                      className="h-10"
-                      disabled={!!promoteSessionId && contactEmail !== ""}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold text-slate-800">
-                      Teléfono (Opcional)
-                    </Label>
-                    <Input
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold text-slate-800">
-                      Unidad de Negocio <span className="text-red-500">*</span>
-                    </Label>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:ring-indigo-600"
-                      value={unidadNegocio}
-                      onChange={(e) => setUnidadNegocio(e.target.value)}
-                    >
-                      {unidadesNegocio.map((u) => (
-                        <option key={u} value={u}>
-                          {u}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold text-slate-800">
-                      Tipo de Cliente
-                    </Label>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:ring-indigo-600"
-                      value={tipoCliente}
-                      onChange={(e) => setTipoCliente(e.target.value)}
-                    >
-                      <option value="">Selecciona...</option>
-                      {tiposCliente.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-semibold text-slate-800">
+                        Correo Electrónico{" "}
+                        <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        type="email"
+                        value={contactEmail}
+                        onChange={(e) => setContactEmail(e.target.value)}
+                        required
+                        className="h-10"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-semibold text-slate-800">
+                        Teléfono (Opcional)
+                      </Label>
+                      <Input
+                        type="tel"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        className="h-10"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-semibold text-slate-800">
+                        Unidad de Negocio{" "}
+                        <span className="text-red-500">*</span>
+                      </Label>
+                      <select
+                        className="flex h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:ring-indigo-600"
+                        value={unidadNegocio}
+                        onChange={(e) => setUnidadNegocio(e.target.value)}
+                      >
+                        {unidadesNegocio.map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-semibold text-slate-800">
+                        Tipo de Cliente
+                      </Label>
+                      <select
+                        className="flex h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:ring-indigo-600"
+                        value={tipoCliente}
+                        onChange={(e) => setTipoCliente(e.target.value)}
+                      >
+                        <option value="">Selecciona...</option>
+                        {tiposCliente.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {workflow === "onboarding" && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
@@ -1069,11 +1094,11 @@ export function CreateSessionPage() {
               <div className="pt-4 border-t border-slate-100">
                 <Button
                   type="submit"
-                  className={`w-full text-white h-11 text-sm font-semibold rounded-md shadow-sm gap-2 ${promoteSessionId ? "bg-amber-600 hover:bg-amber-700" : "bg-indigo-600 hover:bg-indigo-700"}`}
+                  className={`w-full text-white h-11 text-sm font-semibold rounded-md shadow-sm gap-2 ${promoteSessionId ? "bg-emerald-600 hover:bg-emerald-700" : "bg-indigo-600 hover:bg-indigo-700"}`}
                 >
                   <Sparkles className="h-4 w-4" />{" "}
                   {promoteSessionId
-                    ? "Actualizar y Generar Nuevo Enlace"
+                    ? "Guardar Configuración y Enviar a Cliente"
                     : "Generar Sesión y Preparar Link"}
                 </Button>
               </div>
@@ -1097,7 +1122,7 @@ export function CreateSessionPage() {
               </div>
               <div className="text-center space-y-2">
                 <h3 className="text-xl font-bold text-slate-900">
-                  Sesión Generada Exitosamente
+                  Configuración Comercial Lista
                 </h3>
               </div>
               <div className="w-full max-w-md p-5 rounded-md bg-slate-50 border border-slate-200 space-y-4">
