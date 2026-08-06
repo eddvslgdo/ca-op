@@ -37,6 +37,7 @@ import {
   Briefcase,
   Star,
   Layers,
+  FileCheck,
 } from "lucide-react";
 import type { MagicLinkSession } from "@/types/onboarding";
 import { supabase } from "@/lib/supabase";
@@ -234,7 +235,6 @@ export function SacWorkspace({
     setActiveAlert(null);
   };
 
-  // Helper para determinar la Fase Macro
   const getFaseMacro = (sess: MagicLinkSession) => {
     if (sess.status === "approved") {
       return {
@@ -451,7 +451,6 @@ export function SacWorkspace({
 
                       <TableCell className="text-right">
                         <div className="flex justify-end items-center gap-2 h-full">
-                          {/* BOTÓN VER CLIENTE (Solo si está aprobado) */}
                           {sess.status === "approved" && (
                             <Button
                               onClick={(e) => {
@@ -466,7 +465,6 @@ export function SacWorkspace({
                             </Button>
                           )}
 
-                          {/* BOTÓN OPERATIVO: REACTIVAR ENLACE */}
                           {sess.status !== "completed_by_client" &&
                             sess.status !== "approved" && (
                               <Button
@@ -475,7 +473,7 @@ export function SacWorkspace({
                                   onReactivateSession(sess.sessionId);
                                 }}
                                 size="sm"
-                                disabled={sess.status !== "expired"} // Solo se activa si está vencido
+                                disabled={sess.status !== "expired"}
                                 variant={
                                   sess.status === "expired"
                                     ? "default"
@@ -496,7 +494,6 @@ export function SacWorkspace({
                               </Button>
                             )}
 
-                          {/* BOTÓN OPERATIVO: PROMOVER A ONBOARDING */}
                           {sess.workflow === "lead" &&
                             sess.status === "completed_by_client" &&
                             sess.crmProspectId && (
@@ -635,7 +632,6 @@ export function SacWorkspace({
                     </strong>
                   </p>
 
-                  {/* BOTÓN REACTIVAR EN PANEL LATERAL (También actualizado) */}
                   {currentSession.status !== "completed_by_client" &&
                     currentSession.status !== "approved" && (
                       <Button
@@ -713,7 +709,7 @@ export function SacWorkspace({
                     onClick={() => setIsFullDetailsOpen(true)}
                     className="h-6 px-2 text-[10px] text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800"
                   >
-                    <Eye className="h-3 w-3 mr-1" /> Ver Detalle
+                    <Eye className="h-3 w-3 mr-1" /> Ver Detalle Completo
                   </Button>
                 </div>
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-4">
@@ -834,145 +830,254 @@ export function SacWorkspace({
         </>
       )}
 
-      {/* MODAL: VISOR DE EXPEDIENTE COMPLETO */}
+      {/* MODAL: VISOR DE EXPEDIENTE COMPLETO ENRIQUECIDO */}
       {isFullDetailsOpen && currentSession && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 lg:p-8 animate-in fade-in">
-          <Card className="w-full max-w-4xl max-h-[90vh] flex flex-col bg-white shadow-2xl border-0 overflow-hidden animate-in zoom-in-95">
-            <CardHeader className="bg-slate-50 border-b border-slate-200 flex-none shrink-0 py-4 px-6">
+          <Card className="w-full max-w-5xl max-h-[90vh] flex flex-col bg-slate-50 shadow-2xl border-0 overflow-hidden animate-in zoom-in-95">
+            <CardHeader className="bg-white border-b border-slate-200 flex-none shrink-0 py-4 px-6 md:px-8">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-xl text-slate-900 flex items-center gap-2">
-                    <FileText className="h-6 w-6 text-indigo-600" /> Expediente
-                    Cliente / Prospecto
+                  <CardTitle className="text-xl md:text-2xl text-slate-900 flex items-center gap-2">
+                    <FileCheck className="h-6 w-6 text-indigo-600" /> Expediente
+                    Maestro de Cliente
                   </CardTitle>
-                  <p className="text-sm text-slate-500 mt-1 font-mono font-medium">
-                    {currentSession.sessionId} -{" "}
-                    {currentSession.ultimoAvance?.empresa?.razonSocial}
+                  <p className="text-sm text-slate-500 mt-1 font-medium">
+                    <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-indigo-700">
+                      {currentSession.sessionId}
+                    </span>{" "}
+                    -{" "}
+                    {currentSession.ultimoAvance?.empresa?.razonSocial ||
+                      "Razón Social Pendiente"}
                   </p>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setIsFullDetailsOpen(false)}
-                  className="text-slate-400 hover:bg-slate-200 rounded-full"
+                  className="text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded-full h-10 w-10"
                 >
                   <X className="h-6 w-6" />
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
-              {/* NUEVA SECCIÓN: CONFIGURACIÓN COMERCIAL SAC */}
+            <CardContent className="flex-1 overflow-y-auto p-6 md:p-8">
+              {/* SECCIÓN: CONFIGURACIÓN COMERCIAL SAC */}
               {currentSession.configComercial &&
                 Array.isArray(currentSession.configComercial) &&
                 currentSession.configComercial.length > 0 && (
-                  <div className="mb-6 bg-indigo-50/70 p-5 rounded-xl border border-indigo-100 shadow-sm space-y-4">
-                    <h4 className="font-bold text-indigo-900 flex items-center gap-2 border-b border-indigo-200/60 pb-2 text-sm">
-                      <Briefcase className="h-4 w-4 text-indigo-600" />{" "}
-                      Parámetros CRM (Configurado por SAC)
+                  <div className="mb-8 space-y-4">
+                    <h4 className="font-bold text-indigo-900 flex items-center gap-2 border-b border-indigo-200/60 pb-2 text-base">
+                      <Briefcase className="h-5 w-5 text-indigo-600" />{" "}
+                      Configuración Comercial CRM (Áreas de Venta)
                     </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                      <div>
-                        <span className="text-slate-500 block mb-0.5 font-medium">
-                          Unidad de Negocio:
-                        </span>
-                        <Badge
-                          variant="secondary"
-                          className="bg-white border-slate-200 text-indigo-900 font-semibold"
-                        >
-                          {currentSession.configComercial[0].unidadNegocio ||
-                            "N/A"}
-                        </Badge>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block mb-0.5 font-medium">
-                          Tipo de Cliente:
-                        </span>
-                        <p className="font-semibold text-slate-900">
-                          {currentSession.configComercial[0].tipoCliente ||
-                            "N/A"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block mb-0.5 font-medium">
-                          Org. de Ventas:
-                        </span>
-                        <p className="font-semibold text-slate-900">
-                          {currentSession.configComercial[0]
-                            .organizacionVentas || "N/A"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block mb-0.5 font-medium">
-                          Canal y División:
-                        </span>
-                        <p className="font-semibold text-slate-900">
-                          {currentSession.configComercial[0].canalDistribucion}{" "}
-                          / {currentSession.configComercial[0].division}
-                        </p>
-                      </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {currentSession.configComercial.map(
+                        (config: any, idx: number) => (
+                          <div
+                            key={idx}
+                            className="bg-indigo-50/70 p-5 rounded-xl border border-indigo-100 shadow-sm space-y-4"
+                          >
+                            <div className="flex justify-between items-center border-b border-indigo-200/50 pb-3">
+                              <Badge
+                                variant="secondary"
+                                className="bg-white border-indigo-200 text-indigo-900 font-bold px-3 py-1"
+                              >
+                                Área de Ventas {idx + 1}
+                              </Badge>
+                              <span className="text-sm text-indigo-700 font-semibold">
+                                {config.unidadNegocio} |{" "}
+                                {config.tipoCliente || "Sin Tipo"}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                              <div>
+                                <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                                  Org. de Ventas:
+                                </span>
+                                <p className="font-semibold text-slate-900 text-sm">
+                                  {config.organizacionVentas || "N/A"}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                                  Canal y División:
+                                </span>
+                                <p className="font-semibold text-slate-900 text-sm">
+                                  {config.canalDistribucion} / {config.division}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                                  Oficina Ventas:
+                                </span>
+                                <p className="font-semibold text-slate-900 text-sm">
+                                  {config.oficinaVentas || "N/A"}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                                  Grupo Vendedores:
+                                </span>
+                                <p className="font-semibold text-slate-900 text-sm">
+                                  {config.grupoVendedores || "N/A"}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                                  Grupo Clientes:
+                                </span>
+                                <p className="font-semibold text-slate-900 text-sm">
+                                  {config.grupoClientes || "N/A"}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                                  Incoterms:
+                                </span>
+                                <p className="font-semibold text-slate-900 text-sm">
+                                  {config.incoterms || "N/A"}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                                  Lugar Entrega:
+                                </span>
+                                <p className="font-semibold text-slate-900 text-sm">
+                                  {config.lugarEntrega || "N/A"}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                                  Moneda:
+                                </span>
+                                <p className="font-semibold text-slate-900 text-sm">
+                                  {config.moneda || "N/A"}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                                  Prioridad Entrega:
+                                </span>
+                                <p className="font-semibold text-slate-900 text-sm">
+                                  {config.prioridadEntrega || "N/A"}
+                                </p>
+                              </div>
+                            </div>
+                            {config.impuestos && (
+                              <div className="pt-3 mt-1 border-t border-indigo-200/50 grid grid-cols-2 gap-4">
+                                <div>
+                                  <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                                    Impuesto (IVA):
+                                  </span>
+                                  <p className="font-semibold text-slate-900 text-sm">
+                                    {config.impuestos.iva || "N/A"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                                    Impuesto (IEPS):
+                                  </span>
+                                  <p className="font-semibold text-slate-900 text-sm">
+                                    {config.impuestos.ieps || "N/A"}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ),
+                      )}
                     </div>
                   </div>
                 )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* COLUMNA IZQUIERDA */}
                 <div className="space-y-6">
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2">
-                      <Building2 className="h-4 w-4 text-indigo-500" />{" "}
-                      Información General
+                  {/* INFORMACIÓN GENERAL */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2 text-base">
+                      <Building2 className="h-5 w-5 text-indigo-500" />{" "}
+                      Información General de la Empresa
                     </h4>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <span className="text-slate-500">Razón Social:</span>
-                        <p className="font-semibold text-slate-900">
-                          {currentSession.ultimoAvance?.empresa?.razonSocial}
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                      <div className="col-span-2">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Razón Social:
+                        </span>
+                        <p className="font-bold text-slate-900 text-base">
+                          {currentSession.ultimoAvance?.empresa?.razonSocial ||
+                            "No especificado"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">RFC:</span>
-                        <p className="font-semibold text-slate-900">
-                          {currentSession.ultimoAvance?.empresa?.rfc}
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          RFC:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm font-mono">
+                          {currentSession.ultimoAvance?.empresa?.rfc ||
+                            "No especificado"}
                         </p>
                       </div>
                       <div className="col-span-2">
-                        <span className="text-slate-500">Régimen Fiscal:</span>
-                        <p className="font-semibold text-slate-900">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Régimen Fiscal:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.empresa
                             ?.regimenFiscal || "No especificado"}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Uso CFDI:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
+                          {currentSession.ultimoAvance?.empresa?.usoCFDI ||
+                            "No especificado"}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Giro Comercial:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
+                          {currentSession.ultimoAvance?.empresa
+                            ?.giroComercial || "No especificado"}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2">
-                      <User className="h-4 w-4 text-indigo-500" /> Contacto y
-                      Legal
+                  {/* CONTACTO */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2 text-base">
+                      <User className="h-5 w-5 text-indigo-500" /> Contacto
+                      Principal
                     </h4>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                       <div className="col-span-2">
-                        <span className="text-slate-500">
-                          Representante Legal:
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Representante Legal / Contacto:
                         </span>
-                        <p className="font-semibold text-slate-900">
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.contacto
                             ?.nombreRepresentante || "No especificado"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
                           Correo Electrónico:
                         </span>
-                        <p className="font-semibold text-slate-900">
-                          {
-                            currentSession.ultimoAvance?.contacto
-                              ?.correoContacto
-                          }
+                        <p className="font-semibold text-slate-900 text-sm">
+                          {currentSession.ultimoAvance?.contacto
+                            ?.correoContacto || "No especificado"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">Teléfono:</span>
-                        <p className="font-semibold text-slate-900">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Teléfono:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.contacto
                             ?.telefonoContacto || "No especificado"}
                         </p>
@@ -980,100 +1085,152 @@ export function SacWorkspace({
                     </div>
                   </div>
 
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2">
-                      <MapPin className="h-4 w-4 text-indigo-500" /> Domicilio
+                  {/* DOMICILIO FISCAL */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2 text-base">
+                      <MapPin className="h-5 w-5 text-indigo-500" /> Domicilio
                       Fiscal
                     </h4>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                       <div className="col-span-2">
-                        <span className="text-slate-500">Calle:</span>
-                        <p className="font-semibold text-slate-900">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Calle:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.direccionFiscal
                             ?.calle || "No especificado"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">Num. Exterior:</span>
-                        <p className="font-semibold text-slate-900">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Num. Exterior:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.direccionFiscal
                             ?.numeroExterior || "N/A"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">Código Postal:</span>
-                        <p className="font-semibold text-slate-900">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Num. Interior:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
+                          {currentSession.ultimoAvance?.direccionFiscal
+                            ?.numeroInterior || "N/A"}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Código Postal:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.direccionFiscal
                             ?.codigoPostal || "N/A"}
                         </p>
                       </div>
-                      <div className="col-span-2">
-                        <span className="text-slate-500">Colonia:</span>
-                        <p className="font-semibold text-slate-900">
+                      <div>
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Colonia:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.direccionFiscal
                             ?.colonia || "No especificado"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">Municipio:</span>
-                        <p className="font-semibold text-slate-900">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Municipio / Alcaldía:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.direccionFiscal
                             ?.municipio || "No especificado"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">Estado:</span>
-                        <p className="font-semibold text-slate-900">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Localidad:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
+                          {currentSession.ultimoAvance?.direccionFiscal
+                            ?.localidad || "N/A"}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Estado:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.direccionFiscal
                             ?.estado || "No especificado"}
+                        </p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Referencias:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
+                          Entre calle{" "}
+                          {currentSession.ultimoAvance?.direccionFiscal
+                            ?.entreCalle || "N/A"}{" "}
+                          y calle{" "}
+                          {currentSession.ultimoAvance?.direccionFiscal
+                            ?.yCalle || "N/A"}
                         </p>
                       </div>
                     </div>
                   </div>
                 </div>
 
+                {/* COLUMNA DERECHA */}
                 <div className="space-y-6">
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2">
-                      <CreditCard className="h-4 w-4 text-indigo-500" /> Datos
+                  {/* DATOS BANCARIOS */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-2 text-base">
+                      <CreditCard className="h-5 w-5 text-indigo-500" /> Datos
                       Bancarios y Facturación
                     </h4>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                       <div>
-                        <span className="text-slate-500">Banco:</span>
-                        <p className="font-semibold text-slate-900">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Banco:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.facturacion?.banco ||
                             "No especificado"}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
                           Últimos 4 dígitos:
                         </span>
-                        <p className="font-semibold text-slate-900">
+                        <p className="font-semibold text-slate-900 text-sm font-mono">
                           {currentSession.ultimoAvance?.facturacion
-                            ?.cuenta4Digitos || "No especificado"}
+                            ?.cuenta4Digitos || "----"}
                         </p>
                       </div>
                       <div className="col-span-2">
-                        <span className="text-slate-500">Forma de Pago:</span>
-                        <p className="font-semibold text-slate-900">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Forma de Pago:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.facturacion
                             ?.formaPago || "No especificado"}
                         </p>
                       </div>
                       <div className="col-span-2">
-                        <span className="text-slate-500">Método de Pago:</span>
-                        <p className="font-semibold text-slate-900">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
+                          Método de Pago:
+                        </span>
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.facturacion
                             ?.metodoPago || "No especificado"}
                         </p>
                       </div>
                       <div className="col-span-2">
-                        <span className="text-slate-500">
+                        <span className="text-slate-500 text-xs block mb-0.5 font-medium uppercase">
                           Correo para Facturas:
                         </span>
-                        <p className="font-semibold text-slate-900">
+                        <p className="font-semibold text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.facturacion
                             ?.correoFacturas || "No especificado"}
                         </p>
@@ -1081,10 +1238,11 @@ export function SacWorkspace({
                     </div>
                   </div>
 
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                  {/* DESTINATARIOS */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                      <h4 className="font-bold text-slate-900 flex items-center gap-1.5">
-                        <Truck className="h-4 w-4 text-indigo-500" />{" "}
+                      <h4 className="font-bold text-slate-900 flex items-center gap-1.5 text-base">
+                        <Truck className="h-5 w-5 text-indigo-500" />{" "}
                         Destinatarios de Mercancía (
                         {currentSession.ultimoAvance?.direccionesEntrega
                           ?.length || 0}
@@ -1095,26 +1253,26 @@ export function SacWorkspace({
                     {currentSession.ultimoAvance?.direccionesEntrega &&
                     currentSession.ultimoAvance.direccionesEntrega.length >
                       0 ? (
-                      <div className="space-y-3">
+                      <div className="space-y-4">
                         {currentSession.ultimoAvance.direccionesEntrega.map(
                           (planta: any, idx: number) => (
                             <div
                               key={idx}
-                              className="bg-slate-50/80 p-3 rounded-lg border border-slate-200 space-y-2"
+                              className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3"
                             >
                               <div className="flex items-center justify-between">
-                                <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                                <span className="font-bold text-slate-800 text-sm flex items-center gap-2">
                                   <span
-                                    className={`h-2 w-2 rounded-full ${planta.validada ? "bg-emerald-500" : "bg-amber-500"}`}
+                                    className={`h-2.5 w-2.5 rounded-full ${planta.validada ? "bg-emerald-500" : "bg-amber-500"}`}
                                   />
                                   {planta.nombrePlanta ||
                                     `Planta / Bodega ${idx + 1}`}
                                 </span>
                               </div>
 
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-600 pt-1 border-t border-slate-100">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-slate-700 border-t border-slate-100 pt-2">
                                 <div>
-                                  <p className="text-slate-500 font-medium">
+                                  <p className="text-slate-500 text-xs font-medium uppercase mb-0.5">
                                     Dirección de Entrega:
                                   </p>
                                   <p className="font-semibold text-slate-900">
@@ -1129,24 +1287,29 @@ export function SacWorkspace({
                                   </p>
                                 </div>
                                 <div>
-                                  <p className="text-slate-500 font-medium">
+                                  <p className="text-slate-500 text-xs font-medium uppercase mb-0.5">
                                     Encargado de Recepción:
                                   </p>
                                   <p className="font-semibold text-slate-900">
                                     {planta.contactoRecepcion ||
                                       "No especificado"}
                                   </p>
-                                  <p className="text-slate-600">
+                                  <p className="text-slate-600 text-xs mt-0.5">
                                     Tel:{" "}
                                     {planta.telefonoRecepcion ||
                                       "No especificado"}
                                   </p>
+                                  {planta.horarioRecepcion && (
+                                    <p className="text-xs text-indigo-600 mt-1 italic">
+                                      Horario: {planta.horarioRecepcion}
+                                    </p>
+                                  )}
                                 </div>
                               </div>
 
-                              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
-                                <span className="text-slate-500 flex items-center gap-1">
-                                  <FileText className="h-3.5 w-3.5 text-indigo-500" />{" "}
+                              <div className="pt-3 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                                <span className="text-slate-500 flex items-center gap-1.5 font-medium uppercase">
+                                  <FileText className="h-4 w-4 text-indigo-500" />{" "}
                                   Comprobante de Domicilio
                                 </span>
                                 {planta.comprobanteDomicilioUrl ? (
@@ -1154,15 +1317,15 @@ export function SacWorkspace({
                                     href={planta.comprobanteDomicilioUrl}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="text-indigo-600 font-semibold hover:underline flex items-center gap-1"
+                                    className="text-indigo-600 font-bold hover:underline flex items-center gap-1"
                                   >
                                     Ver Documento{" "}
-                                    <ExternalLink className="h-3 w-3" />
+                                    <ExternalLink className="h-3.5 w-3.5" />
                                   </a>
                                 ) : (
-                                  <span className="text-amber-600 font-medium flex items-center gap-1">
-                                    <AlertTriangle className="h-3 w-3" /> Sin
-                                    adjunto
+                                  <span className="text-amber-600 font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="h-3.5 w-3.5" />{" "}
+                                    Sin adjunto
                                   </span>
                                 )}
                               </div>
@@ -1171,8 +1334,8 @@ export function SacWorkspace({
                         )}
                       </div>
                     ) : (
-                      <div className="p-3 bg-slate-50 rounded-lg text-center border border-dashed border-slate-200">
-                        <p className="text-xs text-slate-500 italic">
+                      <div className="p-4 bg-slate-50 rounded-lg text-center border border-dashed border-slate-300">
+                        <p className="text-sm text-slate-500 italic">
                           Sin plantas adicionales. La mercancía se entregará en
                           el domicilio fiscal registrado.
                         </p>
@@ -1180,6 +1343,77 @@ export function SacWorkspace({
                     )}
                   </div>
                 </div>
+
+                {/* NUEVA SECCIÓN: DOCUMENTOS LEGALES ADJUNTOS (Ancho completo hasta abajo) */}
+                {currentSession.ultimoAvance?.documentosTemporales &&
+                  Object.keys(currentSession.ultimoAvance.documentosTemporales)
+                    .length > 0 && (
+                    <div className="col-span-1 md:col-span-2 bg-slate-100 p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 mt-2">
+                      <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2 text-base">
+                        <FileCheck className="h-5 w-5 text-indigo-600" />{" "}
+                        Documentos Legales Adjuntos (Expediente PDF)
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {currentSession.ultimoAvance.documentosTemporales
+                          .csf && (
+                          <a
+                            href={
+                              currentSession.ultimoAvance.documentosTemporales
+                                .csf
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200 hover:border-indigo-400 hover:shadow-md transition group"
+                          >
+                            <div className="bg-rose-50 p-2 rounded text-rose-600 group-hover:bg-rose-100 transition">
+                              <FileText className="h-5 w-5" />
+                            </div>
+                            <span className="font-semibold text-slate-800 text-sm group-hover:text-indigo-700">
+                              Constancia Fiscal (CSF)
+                            </span>
+                          </a>
+                        )}
+                        {currentSession.ultimoAvance.documentosTemporales
+                          .comprobante && (
+                          <a
+                            href={
+                              currentSession.ultimoAvance.documentosTemporales
+                                .comprobante
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200 hover:border-indigo-400 hover:shadow-md transition group"
+                          >
+                            <div className="bg-amber-50 p-2 rounded text-amber-600 group-hover:bg-amber-100 transition">
+                              <FileText className="h-5 w-5" />
+                            </div>
+                            <span className="font-semibold text-slate-800 text-sm group-hover:text-indigo-700">
+                              Comprobante Domicilio
+                            </span>
+                          </a>
+                        )}
+                        {currentSession.ultimoAvance.documentosTemporales
+                          .ine && (
+                          <a
+                            href={
+                              currentSession.ultimoAvance.documentosTemporales
+                                .ine
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200 hover:border-indigo-400 hover:shadow-md transition group"
+                          >
+                            <div className="bg-blue-50 p-2 rounded text-blue-600 group-hover:bg-blue-100 transition">
+                              <User className="h-5 w-5" />
+                            </div>
+                            <span className="font-semibold text-slate-800 text-sm group-hover:text-indigo-700">
+                              Identificación (INE)
+                            </span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
               </div>
             </CardContent>
           </Card>
