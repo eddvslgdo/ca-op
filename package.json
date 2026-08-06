@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "react-router-dom": "^7.18.1"
+  },
+  "devDependencies": {
+    "vite": "^8.2.1"
   }
 }
