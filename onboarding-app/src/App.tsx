@@ -78,6 +78,7 @@ function SacDashboard() {
             crmProspectId: row.crm_prospect_id,
             clienteExisteEnCRM: !!row.crm_prospect_id,
             configComercial: row.config_comercial,
+            propietario: row.propietario, // <--- NUEVO: AQUÍ FALTABA PASAR EL DATO
             fechaCreacion: new Date(row.created_at).toLocaleDateString("es-MX"),
             fechaExpiracion: new Date(row.expires_at).toLocaleDateString(
               "es-MX",
@@ -86,7 +87,7 @@ function SacDashboard() {
             status: row.status,
             ultimoAvance: row.ultimo_avance,
             documentosTemporales: {},
-            auditLogs: logsDeSesion, // <--- ¡AQUÍ ESTÁ LA MAGIA! Ya no está vacío.
+            auditLogs: logsDeSesion,
           };
         });
         setSessions(sesionesRecuperadas);
@@ -106,16 +107,14 @@ function SacDashboard() {
         .from("sessions")
         .update({ crm_prospect_id: fakeCrmId })
         .eq("session_id", sessionId);
-      await supabase
-        .from("audit_logs")
-        .insert([
-          {
-            session_id: sessionId,
-            usuario: "Sistema",
-            accion: "Sincronización inicial con CRM",
-            resultado: "ID Asignado",
-          },
-        ]);
+      await supabase.from("audit_logs").insert([
+        {
+          session_id: sessionId,
+          usuario: "Sistema",
+          accion: "Sincronización inicial con CRM",
+          resultado: "ID Asignado",
+        },
+      ]);
       fetchSessions();
     } catch (error) {
       console.error(error);
@@ -136,16 +135,14 @@ function SacDashboard() {
           reactivaciones_count: sessionActual.reactivacionesCount + 1,
         })
         .eq("session_id", sessionId);
-      await supabase
-        .from("audit_logs")
-        .insert([
-          {
-            session_id: sessionId,
-            usuario: "SAC",
-            accion: "Promoción a ONBOARDING",
-            resultado: "Exitoso",
-          },
-        ]);
+      await supabase.from("audit_logs").insert([
+        {
+          session_id: sessionId,
+          usuario: "SAC",
+          accion: "Promoción a ONBOARDING",
+          resultado: "Exitoso",
+        },
+      ]);
       fetchSessions();
     } catch (error) {
       console.error(error);
@@ -158,16 +155,14 @@ function SacDashboard() {
         .from("sessions")
         .update({ status: "approved" })
         .eq("session_id", sessionId);
-      await supabase
-        .from("audit_logs")
-        .insert([
-          {
-            session_id: sessionId,
-            usuario: "SAC (Revisor)",
-            accion: "Aprobación y Enriquecimiento CRM",
-            resultado: "Enviado",
-          },
-        ]);
+      await supabase.from("audit_logs").insert([
+        {
+          session_id: sessionId,
+          usuario: "SAC (Revisor)",
+          accion: "Aprobación y Enriquecimiento CRM",
+          resultado: "Enviado",
+        },
+      ]);
       fetchSessions();
     } catch (error) {
       console.error(error);
@@ -182,16 +177,14 @@ function SacDashboard() {
         .from("sessions")
         .update({ status: "active", expires_at: newExp.toISOString() })
         .eq("session_id", sessionId);
-      await supabase
-        .from("audit_logs")
-        .insert([
-          {
-            session_id: sessionId,
-            usuario: "SAC",
-            accion: "Reactivación / Extensión de Link",
-            resultado: "+3 Días",
-          },
-        ]);
+      await supabase.from("audit_logs").insert([
+        {
+          session_id: sessionId,
+          usuario: "SAC",
+          accion: "Reactivación / Extensión de Link",
+          resultado: "+3 Días",
+        },
+      ]);
       fetchSessions();
     } catch (error) {
       console.error(error);

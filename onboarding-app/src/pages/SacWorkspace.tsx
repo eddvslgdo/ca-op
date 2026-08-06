@@ -500,7 +500,7 @@ export function SacWorkspace({
                           </Badge>
                           <span className="text-xs text-slate-500 font-medium flex items-center gap-1 mt-1">
                             <User className="h-3 w-3" />{" "}
-                            {(sess as any).propietario || "Sin asignar"}
+                            {sess.propietario || "Sin asignar"}
                           </span>
                         </div>
                       </TableCell>
@@ -625,7 +625,7 @@ export function SacWorkspace({
         )}
       </main>
 
-      {/* PANEL SLIDE-OVER (INSPECTOR DE SESIÓN LATERAL - REDUCIDO Y LIMPIO) */}
+      {/* PANEL SLIDE-OVER (INSPECTOR DE SESIÓN LATERAL) */}
       {currentSession && !isFullDetailsOpen && (
         <>
           <div
@@ -783,7 +783,7 @@ export function SacWorkspace({
         </>
       )}
 
-      {/* MODAL MESA DE TRABAJO: VISOR DE EXPEDIENTE COMPLETO ENRIQUECIDO Y DINÁMICO */}
+      {/* MODAL MESA DE TRABAJO */}
       {isFullDetailsOpen && currentSession && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 lg:p-8 animate-in fade-in">
           <Card className="w-full max-w-5xl max-h-[95vh] flex flex-col bg-slate-50 shadow-2xl border-0 overflow-hidden animate-in zoom-in-95">
@@ -1006,14 +1006,13 @@ export function SacWorkspace({
                       )}
                     </div>
 
-                    {/* MOSTRAR PROPIETARIO AQUI */}
                     <div className="col-span-2 pb-3 mb-1 border-b border-slate-100">
                       <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider block mb-1">
                         Ejecutivo de Ventas Responsable:
                       </span>
                       <p className="font-bold text-indigo-700 flex items-center gap-1.5 text-sm">
                         <User className="h-4 w-4" />{" "}
-                        {(currentSession as any).propietario || "No asignado"}
+                        {currentSession.propietario || "No asignado"}
                       </p>
                     </div>
 
