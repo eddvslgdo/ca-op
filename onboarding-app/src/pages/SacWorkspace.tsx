@@ -203,13 +203,11 @@ export function SacWorkspace({
         break;
       case "correct":
         try {
-          // --- NUEVA LÓGICA: RESETEO DE VALIDACIÓN ---
           let updatePayload: any = {
             status: "corrections_requested",
             notas_correccion: JSON.stringify(correctionNotesMap),
           };
 
-          // Si mandamos a corregir 'entregas', reseteamos el estatus de validación a false
           if (
             correctionNotesMap["entregas"] !== undefined &&
             currentSession?.ultimoAvance?.direccionesEntrega
@@ -1290,7 +1288,10 @@ export function SacWorkspace({
                           <Truck className="h-5 w-5 text-indigo-500" />{" "}
                           Destinatarios (
                           {currentSession.ultimoAvance?.direccionesEntrega
-                            ?.length || 0}
+                            ?.length ||
+                            (currentSession.ultimoAvance?.direccionFiscal?.calle
+                              ? 1
+                              : 0)}
                           )
                         </h4>
                       </div>
@@ -1410,10 +1411,103 @@ export function SacWorkspace({
                             ),
                           )}
                         </div>
+                      ) : currentSession.ultimoAvance?.direccionFiscal
+                          ?.calle ? (
+                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                              Domicilio Fiscal (Entrega principal)
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="h-6 text-[10px] gap-1 px-2 bg-emerald-50 text-emerald-700 border-emerald-300"
+                            >
+                              <Check className="h-3 w-3 text-emerald-600" />{" "}
+                              Validada
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700 border-t border-slate-100 pt-3">
+                            <div>
+                              <p className="text-slate-500 text-xs font-medium uppercase mb-1">
+                                Dirección de Entrega:
+                              </p>
+                              <p className="font-medium text-slate-900">
+                                {
+                                  currentSession.ultimoAvance.direccionFiscal
+                                    .calle
+                                }{" "}
+                                #
+                                {currentSession.ultimoAvance.direccionFiscal
+                                  .numeroExterior || "S/N"}
+                              </p>
+                              <p>
+                                {
+                                  currentSession.ultimoAvance.direccionFiscal
+                                    .colonia
+                                }
+                                , C.P.{" "}
+                                {
+                                  currentSession.ultimoAvance.direccionFiscal
+                                    .codigoPostal
+                                }
+                              </p>
+                              <p>
+                                {
+                                  currentSession.ultimoAvance.direccionFiscal
+                                    .municipio
+                                }
+                                ,{" "}
+                                {
+                                  currentSession.ultimoAvance.direccionFiscal
+                                    .estado
+                                }
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500 text-xs font-medium uppercase mb-1">
+                                Encargado de Recepción:
+                              </p>
+                              <p className="font-medium text-slate-900">
+                                {currentSession.ultimoAvance.contacto
+                                  ?.nombreRepresentante || "No especificado"}
+                              </p>
+                              <p className="text-slate-600 mt-0.5">
+                                Tel:{" "}
+                                {currentSession.ultimoAvance.contacto
+                                  ?.telefonoContacto || "N/A"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="pt-3 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                            <span className="text-slate-500 flex items-center gap-1.5 font-medium uppercase">
+                              <FileText className="h-4 w-4 text-indigo-500" />{" "}
+                              Comprobante
+                            </span>
+                            {currentSession.ultimoAvance.documentosTemporales
+                              ?.comprobante ? (
+                              <a
+                                href={
+                                  currentSession.ultimoAvance
+                                    .documentosTemporales.comprobante
+                                }
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-indigo-600 font-bold hover:underline flex items-center gap-1"
+                              >
+                                Ver <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            ) : (
+                              <span className="text-amber-600 font-semibold">
+                                Sin adjunto
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       ) : (
                         <div className="p-4 bg-slate-50 rounded-lg text-center border border-dashed border-slate-300">
                           <p className="text-sm text-slate-500 italic">
-                            Sin plantas adicionales.
+                            Sin dirección de entrega registrada.
                           </p>
                         </div>
                       )}
