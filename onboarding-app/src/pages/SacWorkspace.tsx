@@ -196,50 +196,60 @@ export function SacWorkspace({
     }));
   };
 
-  const confirmAlertAction = async () => {
+const confirmAlertAction = async () => {
     if (!activeAlert) return;
+    
+    // Obtenemos los datos del cliente actual de forma segura para los correos
+    const correoCliente = currentSession?.ultimoAvance?.contacto?.correoContacto;
+    const razonSocialCliente = currentSession?.ultimoAvance?.empresa?.razonSocial || "Cliente";
+
     switch (activeAlert.type) {
       case "sync":
         onSyncSessionToCRM(activeAlert.sessionId);
-        setSuccessMessage({
-          title: "Sincronización Iniciada",
-          desc: "Se está generando el ID en SAP/CRM.",
-        });
+        setSuccessMessage({ title: "Sincronización Iniciada", desc: "Se está generando el ID en SAP/CRM." });
         setTimeout(() => setSuccessMessage(null), 3500);
         break;
+      
       case "approve":
         onApproveSession(activeAlert.sessionId);
         setIsFullDetailsOpen(false);
         setSelectedSession(null);
-        setSuccessMessage({
-          title: "¡Expediente Aprobado!",
-          desc: "El cliente ha sido validado y creado con éxito.",
-        });
+        setSuccessMessage({ title: "¡Expediente Aprobado!", desc: "El cliente ha sido validado y creado con éxito." });
+        
+        // --- NUEVO: ENVÍO DE CORREO (APROBACIÓN) ---
+        if (correoCliente) {
+          supabase.functions.invoke('enviar-correo', {
+            body: {
+              tipo: 'approved',
+              destinatario: correoCliente,
+              datos: {
+                crmId: currentSession?.crmProspectId || "ID en proceso",
+                propietario: currentSession?.propietario || "No asignado"
+              }
+            }
+          }).catch(console.error); // Usamos catch para que no detenga la UI si el correo falla
+        }
+
         setTimeout(() => setSuccessMessage(null), 4000);
         break;
+
       case "confirm_corrections":
       case "correct":
         try {
           let updatePayload: any = {
             status: "corrections_requested",
-            notas_correccion: JSON.stringify(correctionNotesMap),
+            notas_correccion: JSON.stringify(correctionNotesMap)
           };
 
-          if (
-            correctionNotesMap["entregas"] !== undefined &&
-            currentSession?.ultimoAvance?.direccionesEntrega
-          ) {
-            const resetDirecciones =
-              currentSession.ultimoAvance.direccionesEntrega.map(
-                (planta: any) => ({
-                  ...planta,
-                  validada: false,
-                }),
-              );
-
+          if (correctionNotesMap["entregas"] !== undefined && currentSession?.ultimoAvance?.direccionesEntrega) {
+            const resetDirecciones = currentSession.ultimoAvance.direccionesEntrega.map((planta: any) => ({
+              ...planta,
+              validada: false
+            }));
+            
             updatePayload.ultimo_avance = {
               ...currentSession.ultimoAvance,
-              direccionesEntrega: resetDirecciones,
+              direccionesEntrega: resetDirecciones
             };
           }
 
@@ -247,39 +257,50 @@ export function SacWorkspace({
             .from("sessions")
             .update(updatePayload)
             .eq("session_id", activeAlert.sessionId);
-
+            
           if (error) throw error;
           if (onRefresh) onRefresh();
+
+          // --- NUEVO: ENVÍO DE CORREO (CORRECCIONES) ---
+          if (correoCliente && currentSession?.token) {
+            supabase.functions.invoke('enviar-correo', {
+              body: {
+                tipo: 'corrections',
+                destinatario: correoCliente,
+                datos: {
+                  razonSocial: razonSocialCliente,
+                  notasMap: correctionNotesMap,
+                  magicLink: `${window.location.origin}/registro/magic-link?token=${currentSession.token}`
+                }
+              }
+            }).catch(console.error);
+          }
+
         } catch (err) {
           console.error("Error al actualizar estado a corrección:", err);
         }
-
+        
         onRequestCorrections(
           activeAlert.sessionId,
           Object.keys(correctionNotesMap),
           JSON.stringify(correctionNotesMap),
         );
-
+        
         setIsFullDetailsOpen(false);
         setSelectedSession(null);
-        setSuccessMessage({
-          title: "Correcciones Solicitadas",
-          desc: "El cliente ha sido notificado para arreglar su expediente.",
-        });
+        setSuccessMessage({ title: "Correcciones Solicitadas", desc: "El cliente ha sido notificado para arreglar su expediente." });
         setTimeout(() => setSuccessMessage(null), 4000);
         break;
+
       case "validate_planta":
         if (activeAlert.plantaIndex !== undefined) {
-          executeToggleValidatePlanta(
-            activeAlert.sessionId,
-            activeAlert.plantaIndex,
-          );
+          executeToggleValidatePlanta(activeAlert.sessionId, activeAlert.plantaIndex);
         }
         break;
     }
     setActiveAlert(null);
   };
-
+  
   const getFaseMacro = (sess: MagicLinkSession) => {
     if (sess.status === "approved") {
       return {

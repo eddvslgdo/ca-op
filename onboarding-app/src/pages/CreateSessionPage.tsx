@@ -298,62 +298,36 @@ export function CreateSessionPage() {
     }
   };
 
-  const handleCreateSession = async (e: React.FormEvent) => {
+const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
     setPageStep("loading");
 
     try {
       const highEntropyToken = `${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`;
-      const rawSessionId =
-        promoteSessionId ||
-        `SES-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      const rawSessionId = promoteSessionId || `SES-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
-      const configComercialFinal =
-        workflow === "onboarding" || promoteSessionId
-          ? salesAreas.map(({ isExpanded, ...areaConfig }) => ({
-              ...areaConfig,
+      const configComercialFinal = workflow === "onboarding" || promoteSessionId
+        ? salesAreas.map(({ isExpanded, ...areaConfig }) => ({
+            ...areaConfig,
+            unidadNegocio,
+            tipoCliente,
+            impuestos: taxConfig,
+          }))
+        : [
+            {
               unidadNegocio,
               tipoCliente,
-              impuestos: taxConfig,
-            }))
-          : [
-              {
-                unidadNegocio,
-                tipoCliente,
-              },
-            ];
+            }
+          ];
 
       const avanceFinal = existingAvance || {
-        empresa: {
-          razonSocial: "",
-          rfc: "",
-          regimenFiscal: "",
-          usoCFDI: "",
-          giroComercial: "",
-        },
-        direccionFiscal: {
-          calle: "",
-          numeroExterior: "",
-          colonia: "",
-          codigoPostal: "",
-          estado: "",
-          municipio: "",
-        },
+        empresa: { razonSocial: "", rfc: "", regimenFiscal: "", usoCFDI: "", giroComercial: "" },
+        direccionFiscal: { calle: "", numeroExterior: "", colonia: "", codigoPostal: "", estado: "", municipio: "" },
         direccionesEntrega: [],
-        contacto: {
-          nombreRepresentante: "",
-          correoContacto: contactEmail,
-          telefonoContacto: phoneNumber,
-        },
-        facturacion: {
-          banco: "",
-          cuenta4Digitos: "",
-          metodoPago: "",
-          formaPago: "",
-          correoFacturas: "",
-        },
+        contacto: { nombreRepresentante: "", correoContacto: contactEmail, telefonoContacto: phoneNumber },
+        facturacion: { banco: "", cuenta4Digitos: "", metodoPago: "", formaPago: "", correoFacturas: "" },
       };
 
       if (promoteSessionId) {
@@ -362,7 +336,7 @@ export function CreateSessionPage() {
           .update({
             workflow: "onboarding",
             status: "active",
-            propietario, // Guardamos el propietario editado o confirmado
+            propietario, 
             config_comercial: configComercialFinal,
             token: highEntropyToken,
             expires_at: expiresAt.toISOString(),
@@ -387,6 +361,19 @@ export function CreateSessionPage() {
             resultado: "Exitoso",
           },
         ]);
+
+        // --- NUEVO: ENVÍO DE CORREO (ONBOARDING) ---
+        await supabase.functions.invoke('enviar-correo', {
+          body: {
+            tipo: 'onboarding_invite',
+            destinatario: contactEmail,
+            datos: {
+              razonSocial: avanceFinal.empresa.razonSocial || "Nuevo Prospecto",
+              magicLink: `${window.location.origin}/registro/magic-link?token=${highEntropyToken}`
+            }
+          }
+        });
+
       } else {
         const { error: insertError } = await supabase.from("sessions").insert([
           {
@@ -394,7 +381,7 @@ export function CreateSessionPage() {
             token: highEntropyToken,
             workflow: workflow,
             status: "active",
-            propietario, // Guardamos el nuevo propietario
+            propietario,
             config_comercial: configComercialFinal,
             ultimo_avance: avanceFinal,
             reactivaciones_count: 0,
@@ -412,6 +399,18 @@ export function CreateSessionPage() {
             resultado: "Exitoso",
           },
         ]);
+
+        // --- NUEVO: ENVÍO DE CORREO (LEAD) ---
+        await supabase.functions.invoke('enviar-correo', {
+          body: {
+            tipo: 'lead_invite',
+            destinatario: contactEmail,
+            datos: {
+              razonSocial: "Nuevo Prospecto",
+              magicLink: `${window.location.origin}/registro/magic-link?token=${highEntropyToken}`
+            }
+          }
+        });
       }
 
       setGeneratedSession({
