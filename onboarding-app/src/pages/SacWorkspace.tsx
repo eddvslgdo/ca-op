@@ -86,8 +86,6 @@ export function SacWorkspace({
 
   const [isFullDetailsOpen, setIsFullDetailsOpen] = useState(false);
 
-  // ESTADO PARA CORRECCIONES
-  const [correctionSections, setCorrectionSections] = useState<string[]>([]);
   const [correctionNotesMap, setCorrectionNotesMap] = useState<
     Record<string, string>
   >({});
@@ -595,20 +593,30 @@ export function SacWorkspace({
         )}
       </main>
 
-      {/* PANEL SLIDE-OVER (INSPECTOR DE SESIÓN LATERLA) */}
+      {/* PANEL SLIDE-OVER (INSPECTOR DE SESIÓN LATERAL - DISEÑO SÚPER PULIDO Y SÓLIDO) */}
       {currentSession && (
         <>
           <div
-            className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40 transition-opacity"
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 transition-opacity"
             onClick={() => setSelectedSession(null)}
           />
-          <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl border-l border-slate-200 flex flex-col animate-in slide-in-from-right duration-300">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-              <div>
-                <span className="text-[10px] font-mono text-indigo-600 font-bold tracking-wider">
-                  {currentSession.sessionId}
-                </span>
-                <h3 className="text-sm font-bold text-slate-900 truncate pr-4">
+          {/* AQUÍ ESTÁ EL CAMBIO: bg-slate-50 en lugar de bg-slate-50/50 para evitar la transparencia */}
+          <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-slate-50 shadow-2xl border-l border-slate-200 flex flex-col animate-in slide-in-from-right duration-300">
+            {/* ENCABEZADO PANEL LATERIAL */}
+            <div className="flex items-start justify-between px-6 py-5 border-b border-slate-200 bg-white shrink-0">
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-bold tracking-wider">
+                    {currentSession.sessionId}
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] uppercase tracking-wider h-5 bg-white text-slate-500 border-slate-200"
+                  >
+                    {currentSession.workflow === "lead" ? "Lead" : "Onboarding"}
+                  </Badge>
+                </div>
+                <h3 className="text-base font-bold text-slate-900 pr-4 leading-tight mt-1">
                   {currentSession.ultimoAvance?.empresa?.razonSocial ||
                     "Empresa en Captura"}
                 </h3>
@@ -617,94 +625,106 @@ export function SacWorkspace({
                 variant="ghost"
                 size="icon"
                 onClick={() => setSelectedSession(null)}
-                className="h-7 w-7 text-slate-400 hover:bg-slate-200 rounded-full shrink-0"
+                className="h-8 w-8 text-slate-400 hover:bg-slate-100 hover:text-slate-600 rounded-full shrink-0"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs">
+            {/* CONTENIDO SCROLLABLE */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 text-xs">
+              {/* TARJETA ENLACE MÁGICO */}
               <div className="space-y-3">
-                <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-1">
-                  <Link2 className="h-4 w-4 text-indigo-500" /> Enlace del
+                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Link2 className="h-4 w-4 text-indigo-500" /> Acceso del
                   Cliente
                 </h4>
-                <div className="flex gap-2">
-                  <Input
-                    value={`${window.location.origin}/registro/magic-link?token=${currentSession.token}`}
-                    readOnly
-                    className="bg-slate-50 font-mono text-[10px] text-slate-600 h-8"
-                  />
-                  <Button
-                    onClick={() => handleCopy(currentSession.token)}
-                    size="sm"
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white h-8 px-2.5 shrink-0"
-                  >
-                    {copiedLink ? (
-                      <Check className="h-3.5 w-3.5" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                </div>
-                <div className="flex items-center justify-between bg-slate-50 border border-slate-100 p-2 rounded">
-                  <p className="text-[10px] text-slate-500 flex items-center gap-1">
-                    Expira:{" "}
-                    <strong
-                      className={`font-semibold ${currentSession.status === "expired" ? "text-red-600" : "text-slate-800"}`}
+                <div className="bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+                  <div className="flex gap-2 p-1">
+                    <Input
+                      value={`${window.location.origin}/registro/magic-link?token=${currentSession.token}`}
+                      readOnly
+                      className="bg-slate-50 font-mono text-[10px] text-slate-600 h-9 border-0 focus-visible:ring-0"
+                    />
+                    <Button
+                      onClick={() => handleCopy(currentSession.token)}
+                      size="sm"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white h-9 px-3 shrink-0 rounded-lg"
                     >
-                      {currentSession.fechaExpiracion}
-                    </strong>
-                  </p>
-
-                  {currentSession.status !== "completed_by_client" &&
-                    currentSession.status !== "approved" && (
-                      <Button
-                        onClick={() =>
-                          onReactivateSession(currentSession.sessionId)
-                        }
-                        size="sm"
-                        disabled={currentSession.status !== "expired"}
-                        variant={
-                          currentSession.status === "expired"
-                            ? "default"
-                            : "outline"
-                        }
-                        className={`h-6 text-[10px] gap-1 transition-all ${
-                          currentSession.status === "expired"
-                            ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm border-0"
-                            : "bg-slate-50 border-slate-200 text-slate-400 shadow-none cursor-not-allowed opacity-70"
-                        }`}
+                      {copiedLink ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-slate-50/80 rounded-b-lg border-t border-slate-100 mt-1">
+                    <span className="text-[10px] text-slate-500">
+                      Expira:{" "}
+                      <strong
+                        className={`${currentSession.status === "expired" ? "text-red-600" : "text-slate-700"}`}
                       >
-                        <RefreshCw className="h-3 w-3" />{" "}
-                        {currentSession.status === "expired"
-                          ? "Reactivar (+3 Días)"
-                          : "Enlace Vigente"}
-                      </Button>
-                    )}
+                        {currentSession.fechaExpiracion}
+                      </strong>
+                    </span>
+
+                    {currentSession.status !== "completed_by_client" &&
+                      currentSession.status !== "approved" && (
+                        <Button
+                          onClick={() =>
+                            onReactivateSession(currentSession.sessionId)
+                          }
+                          size="sm"
+                          disabled={currentSession.status !== "expired"}
+                          variant={
+                            currentSession.status === "expired"
+                              ? "default"
+                              : "ghost"
+                          }
+                          className={`h-6 text-[10px] gap-1 px-2 transition-all ${
+                            currentSession.status === "expired"
+                              ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+                              : "text-slate-400 hover:bg-transparent cursor-not-allowed opacity-70"
+                          }`}
+                        >
+                          <RefreshCw className="h-3 w-3" />{" "}
+                          {currentSession.status === "expired"
+                            ? "Reactivar (+3 Días)"
+                            : "Enlace Vigente"}
+                        </Button>
+                      )}
+                  </div>
                 </div>
               </div>
 
+              {/* ESTADO CRM */}
               <div className="space-y-3">
-                <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 border-b border-slate-100 pb-1">
-                  <Database className="h-4 w-4 text-indigo-500" /> Estado
-                  Comercial CRM
+                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Database className="h-4 w-4 text-indigo-500" /> Integración
+                  CRM
                 </h4>
                 {currentSession.crmProspectId ? (
-                  <div className="bg-emerald-50/50 p-3 rounded-lg border border-emerald-100 space-y-1">
-                    <p className="text-emerald-700 font-semibold flex items-center gap-1.5">
-                      <Check className="h-4 w-4" /> Sincronizado
+                  <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-200/60 flex items-center justify-between shadow-sm">
+                    <p className="text-emerald-800 font-bold flex items-center gap-2 text-sm">
+                      <Check className="h-4 w-4 text-emerald-600" />{" "}
+                      Sincronizado
                     </p>
-                    <p className="font-mono text-emerald-900">
+                    <Badge
+                      variant="outline"
+                      className="font-mono text-emerald-900 border-emerald-300 bg-white"
+                    >
                       {currentSession.crmProspectId}
-                    </p>
+                    </Badge>
                   </div>
                 ) : (
-                  <div className="bg-amber-50/50 p-3 rounded-lg border border-amber-100 space-y-3">
-                    <p className="text-amber-700 font-medium leading-relaxed">
-                      Este prospecto aún no cuenta con un identificador
-                      comercial en SAP/CRM.
-                    </p>
+                  <div className="bg-amber-50/70 p-4 rounded-xl border border-amber-200/60 space-y-3 shadow-sm">
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-amber-900 font-medium leading-relaxed">
+                        Este prospecto aún no cuenta con un identificador
+                        comercial en SAP/CRM.
+                      </p>
+                    </div>
                     {currentSession.status === "completed_by_client" && (
                       <Button
                         onClick={() =>
@@ -712,7 +732,7 @@ export function SacWorkspace({
                         }
                         variant="outline"
                         size="sm"
-                        className="w-full h-8 text-xs gap-1.5 bg-white hover:bg-amber-50 hover:text-amber-800 border-amber-200 font-semibold"
+                        className="w-full h-9 text-xs gap-1.5 bg-white hover:bg-amber-100 text-amber-800 border-amber-300 font-bold shadow-sm transition-colors"
                       >
                         <Database className="h-3.5 w-3.5" /> Generar Prospecto
                         en CRM
@@ -722,143 +742,122 @@ export function SacWorkspace({
                 )}
               </div>
 
+              {/* ACCESO AL EXPEDIENTE MAESTRO (Reemplaza el cuadro redundante) */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
-                  <h4 className="font-semibold text-slate-900 flex items-center gap-1.5">
-                    <FileText className="h-4 w-4 text-indigo-500" /> Información
-                    Capturada
-                  </h4>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsFullDetailsOpen(true)}
-                    className="h-6 px-2 text-[10px] text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800"
-                  >
-                    <Eye className="h-3 w-3 mr-1" /> Ver Detalle Completo
-                  </Button>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-4">
-                  <div>
-                    <p className="font-semibold text-slate-800 flex items-center gap-1 mb-0.5">
-                      <Building2 className="h-3 w-3 text-slate-500" /> Empresa
-                    </p>
-                    <p className="text-slate-600 pl-4">
-                      RFC:{" "}
-                      <span className="font-mono text-slate-900">
-                        {currentSession.ultimoAvance?.empresa?.rfc ||
-                          "No capturado"}
-                      </span>
-                    </p>
-                    <p className="text-slate-600 pl-4">
-                      Contacto:{" "}
-                      <span className="text-slate-900">
-                        {currentSession.ultimoAvance?.contacto
-                          ?.nombreRepresentante || "No capturado"}
-                      </span>
-                    </p>
+                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText className="h-4 w-4 text-indigo-500" /> Expediente
+                  del Cliente
+                </h4>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsFullDetailsOpen(true)}
+                  className="w-full h-12 bg-white hover:bg-indigo-50 hover:border-indigo-200 border-slate-200 shadow-sm flex items-center justify-between px-4 group transition-all"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="bg-indigo-100 p-1.5 rounded-md text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                      <FileCheck className="h-4 w-4" />
+                    </div>
+                    <span className="font-semibold text-slate-700 group-hover:text-indigo-700">
+                      Abrir Expediente Completo
+                    </span>
                   </div>
-                </div>
+                  <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-indigo-600" />
+                </Button>
               </div>
+            </div>
 
-              {(currentSession.status === "completed_by_client" ||
-                currentSession.status === "corrections_requested") && (
-                <div className="space-y-3 pt-4 border-t border-slate-100">
-                  <h4 className="font-semibold text-slate-900 flex items-center gap-1.5 pb-1">
-                    <ShieldCheck className="h-4 w-4 text-emerald-600" />{" "}
-                    Resolución Final SAC
-                  </h4>
+            {/* FOOTER FIJO (ACCIONES DE RESOLUCIÓN) */}
+            {(currentSession.status === "completed_by_client" ||
+              currentSession.status === "corrections_requested") && (
+              <div className="bg-white border-t border-slate-200 p-6 shrink-0 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.05)] z-20">
+                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 mb-3">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" />{" "}
+                  Resolución Final
+                </h4>
 
-                  {currentSession.status === "corrections_requested" ? (
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-center space-y-2">
-                      <AlertTriangle className="h-6 w-6 text-orange-500 mx-auto" />
-                      <div>
-                        <p className="text-sm font-bold text-orange-800">
-                          Enviado a Corrección
-                        </p>
-                        <p className="text-[11px] text-orange-600 mt-1 leading-relaxed">
-                          El expediente fue devuelto. El enlace del cliente ha
-                          sido habilitado nuevamente para que solucione los
-                          errores detectados.
-                        </p>
-                      </div>
-                    </div>
-                  ) : currentSession.workflow === "lead" ? (
-                    <div className="space-y-3">
-                      <p className="text-[11px] text-slate-500">
-                        Valida los datos y promueve a este cliente al flujo
-                        completo de Onboarding.
+                {currentSession.status === "corrections_requested" ? (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-center space-y-2">
+                    <AlertTriangle className="h-6 w-6 text-orange-500 mx-auto" />
+                    <div>
+                      <p className="text-sm font-bold text-orange-800">
+                        Enviado a Corrección
                       </p>
+                      <p className="text-[11px] text-orange-600 mt-1 leading-relaxed">
+                        El expediente fue devuelto. El enlace del cliente está
+                        habilitado para que solucione los errores.
+                      </p>
+                    </div>
+                  </div>
+                ) : currentSession.workflow === "lead" ? (
+                  <div className="space-y-3">
+                    <Button
+                      disabled={!currentSession.crmProspectId}
+                      onClick={(e) =>
+                        handleSafePromoteToOnboarding(
+                          currentSession.sessionId,
+                          e,
+                        )
+                      }
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-10 text-xs gap-1.5 shadow-md"
+                    >
+                      <ArrowUpRight className="h-4 w-4" /> Promover a Onboarding
+                      B2B
+                    </Button>
+                    {!currentSession.crmProspectId && (
+                      <p className="text-[10px] text-amber-600 font-medium text-center">
+                        Debes generar el ID de CRM primero.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex gap-3">
                       <Button
-                        disabled={!currentSession.crmProspectId}
-                        onClick={(e) =>
-                          handleSafePromoteToOnboarding(
-                            currentSession.sessionId,
-                            e,
-                          )
+                        variant="outline"
+                        onClick={() =>
+                          handleSafeRequestCorrections(currentSession.sessionId)
                         }
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-xs gap-1.5 shadow-sm"
+                        className="w-1/3 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-10 text-xs gap-1.5"
                       >
-                        <ArrowUpRight className="h-3.5 w-3.5" /> Promover a
-                        Onboarding B2B
+                        <XCircle className="h-4 w-4" /> Corregir
                       </Button>
-                      {!currentSession.crmProspectId && (
-                        <p className="text-[10px] text-amber-600 font-medium text-center">
-                          Debes generar el ID de CRM primero.
-                        </p>
-                      )}
+                      <Button
+                        disabled={
+                          !currentSession.crmProspectId ||
+                          currentSession.status === "approved" ||
+                          hasUnvalidatedPlants
+                        }
+                        onClick={() =>
+                          handleSafeApproveSession(currentSession.sessionId)
+                        }
+                        className="w-2/3 bg-emerald-600 hover:bg-emerald-700 text-white h-10 text-xs gap-1.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Send className="h-4 w-4" />{" "}
+                        {currentSession.status === "approved"
+                          ? "Enviado"
+                          : "Aprobar Expediente"}
+                      </Button>
                     </div>
-                  ) : (
-                    <>
-                      <p className="text-[11px] text-slate-500 mb-2">
-                        Revisa el expediente completo. Puedes aprobarlo para el
-                        CRM o regresarlo al cliente para correcciones.
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() =>
-                            handleSafeRequestCorrections(
-                              currentSession.sessionId,
-                            )
-                          }
-                          className="w-1/2 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-9 text-xs gap-1.5"
-                        >
-                          <XCircle className="h-3.5 w-3.5" /> Corregir
-                        </Button>
-                        <Button
-                          disabled={
-                            !currentSession.crmProspectId ||
-                            currentSession.status === "approved" ||
-                            hasUnvalidatedPlants
-                          }
-                          onClick={() =>
-                            handleSafeApproveSession(currentSession.sessionId)
-                          }
-                          className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-xs gap-1.5 shadow-sm disabled:opacity-50"
-                        >
-                          <Send className="h-3.5 w-3.5" />{" "}
-                          {currentSession.status === "approved"
-                            ? "Enviado"
-                            : "Aprobar Expediente"}
-                        </Button>
-                      </div>
-                      {!currentSession.crmProspectId &&
-                        !hasUnvalidatedPlants && (
-                          <p className="text-[10px] text-amber-600 font-medium text-center mt-2">
+                    {(!currentSession.crmProspectId ||
+                      hasUnvalidatedPlants) && (
+                      <div className="text-[10px] font-medium text-center space-y-1">
+                        {!currentSession.crmProspectId && (
+                          <p className="text-amber-600">
                             Debes generar el ID de CRM antes de aprobar.
                           </p>
                         )}
-                      {hasUnvalidatedPlants && (
-                        <p className="text-[10px] text-red-600 font-medium text-center mt-2 flex items-center justify-center gap-1">
-                          <AlertTriangle className="h-3 w-3" /> Debes validar
-                          todas las plantas de entrega.
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+                        {hasUnvalidatedPlants && (
+                          <p className="text-red-600 flex items-center justify-center gap-1">
+                            <AlertTriangle className="h-3 w-3" /> Debes validar
+                            todas las plantas de entrega.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}
@@ -1349,7 +1348,6 @@ export function SacWorkspace({
                                   </Button>
                                 </div>
 
-                                {/* NUEVA CUADRICULA DETALLADA DE PLANTA EN EL MODAL */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700 border-t border-slate-100 pt-3">
                                   <div>
                                     <p className="text-slate-500 text-xs font-medium uppercase mb-1">
@@ -1424,7 +1422,7 @@ export function SacWorkspace({
                               className="h-6 text-[10px] gap-1 px-2 bg-emerald-50 text-emerald-700 border-emerald-300"
                             >
                               <Check className="h-3 w-3 text-emerald-600" />{" "}
-                              Validada
+                              Validada por defecto
                             </Badge>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700 border-t border-slate-100 pt-3">
