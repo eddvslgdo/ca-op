@@ -31,7 +31,6 @@ import {
   Trash2,
   X,
   Save,
-  RefreshCw,
   Building2,
   User,
 } from "lucide-react";
@@ -75,6 +74,8 @@ export function CreateSessionPage() {
   const [isTaxesExpanded, setIsTaxesExpanded] = useState(!!promoteSessionId);
   const [isCrmExpanded, setIsCrmExpanded] = useState(!!promoteSessionId);
 
+  // --- NUEVO ESTADO: PROPIETARIO ---
+  const [propietario, setPropietario] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [unidadNegocio, setUnidadNegocio] = useState("Industrial PQ");
@@ -139,6 +140,9 @@ export function CreateSessionPage() {
         setWorkflow("onboarding");
         setIsCrmExpanded(true);
         setIsTaxesExpanded(true);
+
+        // Cargar propietario si ya existía
+        setPropietario(data.propietario || "");
         setContactEmail(data.ultimo_avance?.contacto?.correoContacto || "");
         setPhoneNumber(data.ultimo_avance?.contacto?.telefonoContacto || "");
 
@@ -306,7 +310,6 @@ export function CreateSessionPage() {
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
-      // AQUI ESTA LA MAGIA: Si es Lead, NO guardamos áreas de venta. Si es Onboarding, sí las guardamos.
       const configComercialFinal =
         workflow === "onboarding" || promoteSessionId
           ? salesAreas.map(({ isExpanded, ...areaConfig }) => ({
@@ -359,6 +362,7 @@ export function CreateSessionPage() {
           .update({
             workflow: "onboarding",
             status: "active",
+            propietario, // Guardamos el propietario editado o confirmado
             config_comercial: configComercialFinal,
             token: highEntropyToken,
             expires_at: expiresAt.toISOString(),
@@ -390,6 +394,7 @@ export function CreateSessionPage() {
             token: highEntropyToken,
             workflow: workflow,
             status: "active",
+            propietario, // Guardamos el nuevo propietario
             config_comercial: configComercialFinal,
             ultimo_avance: avanceFinal,
             reactivaciones_count: 0,
@@ -507,6 +512,20 @@ export function CreateSessionPage() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 pt-4">
+                    <div className="space-y-1.5 md:col-span-2">
+                      <Label className="text-sm font-semibold text-slate-800">
+                        Propietario / Ejecutivo de Venta{" "}
+                        <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        type="text"
+                        value={propietario}
+                        onChange={(e) => setPropietario(e.target.value)}
+                        placeholder="Nombre del responsable..."
+                        required
+                        className="h-10 md:w-1/2"
+                      />
+                    </div>
                     <div className="space-y-1.5">
                       <Label className="text-sm font-semibold text-slate-800">
                         Unidad de Negocio{" "}
@@ -583,6 +602,20 @@ export function CreateSessionPage() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                    <div className="space-y-1.5 md:col-span-2">
+                      <Label className="text-sm font-semibold text-slate-800">
+                        Propietario / Ejecutivo de Venta{" "}
+                        <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        type="text"
+                        value={propietario}
+                        onChange={(e) => setPropietario(e.target.value)}
+                        placeholder="Nombre del responsable..."
+                        required
+                        className="h-10 md:w-1/2"
+                      />
+                    </div>
                     <div className="space-y-1.5">
                       <Label className="text-sm font-semibold text-slate-800">
                         Correo Electrónico{" "}

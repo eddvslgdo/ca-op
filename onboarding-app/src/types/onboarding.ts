@@ -24,20 +24,20 @@ export interface CommercialConfig {
   // Datos Generales heredados por área
   unidadNegocio: string
   tipoCliente?: string
-  impuestos: TaxConfig
+  impuestos?: TaxConfig
   
-  // Datos específicos del área de ventas (SAP)
-  organizacionVentas: string
-  canalDistribucion: string
-  division: string
-  oficinaVentas: string
-  grupoVendedores: string
-  condicionesPago: string
-  incoterms: string
-  lugarEntrega: string
-  moneda: string
-  prioridadEntrega: string
-  grupoClientes: string
+  // Datos específicos del área de ventas (SAP) - Opcionales para los Leads
+  organizacionVentas?: string
+  canalDistribucion?: string
+  division?: string
+  oficinaVentas?: string
+  grupoVendedores?: string
+  condicionesPago?: string
+  incoterms?: string
+  lugarEntrega?: string
+  moneda?: string
+  prioridadEntrega?: string
+  grupoClientes?: string
 }
 
 // ==========================================
@@ -55,7 +55,8 @@ export interface MagicLinkSession {
   reactivacionesCount: number
   status: SessionStatus
   ultimoAvance: OnboardingFormValues 
-  documentosTemporales: Record<string, { nombreArchivo: string; urlTemp: string; estatus: "ok" | "rechazado" }>
+  propietario?: string // NUEVO: Ejecutivo responsable
+  documentosTemporales?: Record<string, { nombreArchivo: string; urlTemp: string; estatus: "ok" | "rechazado" }>
   auditLogs: AuditLogEntry[]
 }
 
@@ -67,7 +68,7 @@ export interface CompanyData {
   rfc: string
   regimenFiscal: string
   usoCFDI?: string 
-  // Giro comercial eliminado para evitar ambigüedades
+  giroComercial?: string // Añadido como opcional para no romper la vista SAC
 }
 
 // ESTRUCTURA ACTUALIZADA: Basada en Constancia de Situación Fiscal (SAT)
@@ -86,7 +87,7 @@ export interface AddressData {
 }
 
 export interface DeliveryAddressData {
-  id: string
+  id?: string
   nombrePlanta: string
   contactoRecepcion: string
   telefonoRecepcion: string
@@ -98,6 +99,7 @@ export interface DeliveryAddressData {
   municipio: string
   comprobanteDomicilioUrl?: string
   horarioRecepcion?: string
+  validada?: boolean // NUEVO: Estatus de validación por parte de SAC
 }
 
 export interface LegalContactData {
@@ -120,4 +122,5 @@ export interface OnboardingFormValues {
   direccionesEntrega: DeliveryAddressData[]
   contacto: LegalContactData
   facturacion: BillingData
+  documentosTemporales?: Record<string, string> // NUEVO: Guarda las URLs de los PDFs subidos a Supabase
 }
