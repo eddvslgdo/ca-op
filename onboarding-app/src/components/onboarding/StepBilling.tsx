@@ -67,7 +67,6 @@ export function StepBilling({ data, onChange }: StepBillingProps) {
             >
               <option value="">Selecciona un método...</option>
               <option value="PUE - Pago en una sola exhibición">PUE - Pago en una sola exhibición</option>
-              <option value="PPD - Pago en parcialidades o diferido">PPD - Pago en parcialidades o diferido</option>
             </select>
           </div>
 

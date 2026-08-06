@@ -50,7 +50,10 @@ export function OnboardingPortal() {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  // Estados: Control de Correcciones (AHORA ES UN OBJETO JSON)
+  // NUEVO ESTADO: Control de errores de validación en pantalla
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Estados: Control de Correcciones
   const [sessionStatus, setSessionStatus] = useState<string>("");
   const [correctionNotes, setCorrectionNotes] = useState<
     Record<string, string>
@@ -154,31 +157,49 @@ export function OnboardingPortal() {
   const totalSteps = workflow === "lead" ? 1 : 6;
   const progressPercentage = (currentStep / totalSteps) * 100;
 
-  const updateCompanyData = (fields: Partial<typeof formData.empresa>) =>
+  // Helpers para limpiar errores visuales al teclear
+  const clearError = () => setValidationError(null);
+
+  const updateCompanyData = (fields: Partial<typeof formData.empresa>) => {
+    clearError();
     setFormData((prev) => ({
       ...prev,
       empresa: { ...prev.empresa, ...fields },
     }));
+  };
+
   const updateFiscalAddress = (
     fields: Partial<typeof formData.direccionFiscal>,
-  ) =>
+  ) => {
+    clearError();
     setFormData((prev) => ({
       ...prev,
       direccionFiscal: { ...prev.direccionFiscal, ...fields },
     }));
+  };
+
   const updateDeliveryAddresses = (
     addresses: typeof formData.direccionesEntrega,
-  ) => setFormData((prev) => ({ ...prev, direccionesEntrega: addresses }));
-  const updateContactData = (fields: Partial<typeof formData.contacto>) =>
+  ) => {
+    clearError();
+    setFormData((prev) => ({ ...prev, direccionesEntrega: addresses }));
+  };
+
+  const updateContactData = (fields: Partial<typeof formData.contacto>) => {
+    clearError();
     setFormData((prev) => ({
       ...prev,
       contacto: { ...prev.contacto, ...fields },
     }));
-  const updateBillingData = (fields: Partial<BillingData>) =>
+  };
+
+  const updateBillingData = (fields: Partial<BillingData>) => {
+    clearError();
     setFormData((prev) => ({
       ...prev,
       facturacion: { ...prev.facturacion, ...fields },
     }));
+  };
 
   const uploadDocumentsToStorage = async (): Promise<
     Record<string, string>
@@ -204,28 +225,76 @@ export function OnboardingPortal() {
     return uploadedUrls;
   };
 
-  const handleNext = async () => {
-    if (workflow === "lead" && currentStep === 1) {
-      if (
-        !formData.contacto.telefonoContacto ||
-        formData.contacto.telefonoContacto.trim() === ""
-      ) {
-        alert(
-          "El número de teléfono es obligatorio para completar el registro.",
-        );
-        return;
+  // NUEVO: SISTEMA DE VALIDACIÓN POR PASO
+  const validateCurrentStep = (): string | null => {
+    // Validación Paso 1 (Aplica para Lead y Onboarding)
+    if (currentStep === 1) {
+      const { razonSocial, rfc } = formData.empresa;
+      const { nombreRepresentante, correoContacto, telefonoContacto } =
+        formData.contacto;
+
+      if (!razonSocial?.trim()) return "La Razón Social es obligatoria.";
+      if (!rfc?.trim()) return "El RFC es obligatorio.";
+      if (!nombreRepresentante?.trim())
+        return "El Nombre del Contacto Principal es obligatorio.";
+      if (!correoContacto?.trim())
+        return "El Correo Electrónico es obligatorio.";
+      if (!telefonoContacto?.trim())
+        return "El Teléfono de contacto es obligatorio.";
+    }
+
+    // Validaciones Exclusivas de Onboarding
+    if (workflow === "onboarding") {
+      if (currentStep === 2) {
+        const { calle, codigoPostal, colonia, municipio, estado } =
+          formData.direccionFiscal;
+        if (!calle?.trim()) return "La Calle es obligatoria.";
+        if (!codigoPostal?.trim()) return "El Código Postal es obligatorio.";
+        if (!colonia?.trim()) return "La Colonia es obligatoria.";
+        if (!municipio?.trim())
+          return "El Municipio o Alcaldía es obligatorio.";
+        if (!estado?.trim()) return "El Estado es obligatorio.";
       }
-    } else if (workflow === "onboarding" && currentStep === 2) {
-      if (
-        !formData.contacto.telefonoContacto ||
-        formData.contacto.telefonoContacto.trim() === ""
-      ) {
-        alert("El número de teléfono de contacto es obligatorio.");
-        return;
+
+      if (currentStep === 4) {
+        const { banco, cuenta4Digitos, metodoPago, formaPago, correoFacturas } =
+          formData.facturacion;
+        if (!banco?.trim()) return "El Banco es obligatorio.";
+        if (!cuenta4Digitos?.trim() || cuenta4Digitos.length !== 4)
+          return "La cuenta bancaria debe tener exactamente los últimos 4 dígitos.";
+        if (!metodoPago?.trim()) return "El Método de Pago es obligatorio.";
+        if (!formaPago?.trim()) return "La Forma de Pago es obligatoria.";
+        if (!correoFacturas?.trim())
+          return "El Correo para recibir facturas es obligatorio.";
+      }
+
+      if (currentStep === 5) {
+        if (!documentFiles.csf && !formData.documentosTemporales?.csf)
+          return "Debes adjuntar tu Constancia de Situación Fiscal (PDF).";
+        if (
+          !documentFiles.comprobante &&
+          !formData.documentosTemporales?.comprobante
+        )
+          return "Debes adjuntar tu Comprobante de Domicilio (PDF).";
+        if (!documentFiles.ine && !formData.documentosTemporales?.ine)
+          return "Debes adjuntar tu Identificación Oficial (PDF).";
       }
     }
 
+    return null; // Pasó la validación sin errores
+  };
+
+  const handleNext = async () => {
+    // 1. Validamos antes de intentar avanzar
+    const errorMsg = validateCurrentStep();
+    if (errorMsg) {
+      setValidationError(errorMsg);
+      return; // Detenemos la ejecución si falta algo
+    }
+
+    setValidationError(null);
     setIsSaving(true);
+
     try {
       if (currentStep < totalSteps) {
         const { data: savedRows } = await supabase
@@ -235,9 +304,7 @@ export function OnboardingPortal() {
           .select();
 
         if (!savedRows || savedRows.length === 0) {
-          console.warn(
-            "⚠️ Advertencia: Supabase bloqueó el auto-guardado. Revisa tus políticas RLS.",
-          );
+          console.warn("⚠️ Advertencia: Supabase bloqueó el auto-guardado.");
         }
 
         setCurrentStep((prev) => prev + 1);
@@ -246,7 +313,11 @@ export function OnboardingPortal() {
         const uploadedDocUrls = await uploadDocumentsToStorage();
         const finalFormData = {
           ...formData,
-          documentosTemporales: uploadedDocUrls,
+          // Conservamos los documentos anteriores si el cliente no subió nuevos
+          documentosTemporales: {
+            ...formData.documentosTemporales,
+            ...uploadedDocUrls,
+          },
         };
 
         const { data: updatedRows, error: updateError } = await supabase
@@ -262,8 +333,8 @@ export function OnboardingPortal() {
         if (updateError) throw updateError;
 
         if (!updatedRows || updatedRows.length === 0) {
-          alert(
-            "⚠️ ERROR CRÍTICO DE PERMISOS: La base de datos no permitió guardar la información.",
+          setValidationError(
+            "Error de Permisos: La base de datos no permitió guardar tu información.",
           );
           setIsSaving(false);
           return;
@@ -282,7 +353,7 @@ export function OnboardingPortal() {
       }
     } catch (error) {
       console.error("Error al guardar:", error);
-      alert(
+      setValidationError(
         "Hubo un problema de conexión guardando tu progreso. Por favor intenta nuevamente.",
       );
     } finally {
@@ -292,6 +363,7 @@ export function OnboardingPortal() {
 
   const handleBack = () => {
     if (currentStep > 1) {
+      setValidationError(null);
       setCurrentStep((prev) => prev - 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -447,7 +519,7 @@ export function OnboardingPortal() {
               </div>
               <Progress value={progressPercentage} className="h-2" />
 
-              {/* INDICADORES DE PASO (Con marcadores Rojos de Error) */}
+              {/* INDICADORES DE PASO */}
               {workflow === "onboarding" ? (
                 <div className="grid grid-cols-6 gap-2 pt-2 text-center text-[10px] md:text-xs">
                   <div
@@ -551,7 +623,17 @@ export function OnboardingPortal() {
                 )}
               </CardContent>
 
-              <CardFooter className="flex justify-between p-6 bg-slate-50/50">
+              {/* BANNER ESTILIZADO DE ERROR DE VALIDACIÓN */}
+              {validationError && (
+                <div className="px-6 md:px-8 pb-4">
+                  <div className="bg-red-50 text-red-600 border border-red-200 p-3 rounded-md flex items-center gap-2.5 text-sm font-medium animate-in zoom-in-95">
+                    <AlertTriangle className="h-5 w-5 shrink-0" />
+                    <p>{validationError}</p>
+                  </div>
+                </div>
+              )}
+
+              <CardFooter className="flex justify-between p-6 bg-slate-50/50 rounded-b-xl border-t border-slate-100">
                 <Button
                   variant="outline"
                   onClick={handleBack}

@@ -58,7 +58,6 @@ export function CreateSessionPage() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
 
-  // LEEMOS EL ID INFALIBLEMENTE (ya sea por URL o por estado interno)
   const promoteSessionId =
     location.state?.promoteSessionId ||
     searchParams.get("promover") ||
@@ -69,7 +68,6 @@ export function CreateSessionPage() {
   );
   const [copiedCustom, setCopiedCustom] = useState(false);
 
-  // SI ES PROMOCIÓN, BLOQUEAMOS EL FLUJO A ONBOARDING INMEDIATAMENTE
   const [workflow, setWorkflow] = useState<SessionWorkflow>(
     promoteSessionId ? "onboarding" : "lead",
   );
@@ -308,14 +306,21 @@ export function CreateSessionPage() {
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
-      const configComercialFinal = salesAreas.map(
-        ({ isExpanded, ...areaConfig }) => ({
-          ...areaConfig,
-          unidadNegocio,
-          tipoCliente,
-          impuestos: taxConfig,
-        }),
-      );
+      // AQUI ESTA LA MAGIA: Si es Lead, NO guardamos áreas de venta. Si es Onboarding, sí las guardamos.
+      const configComercialFinal =
+        workflow === "onboarding" || promoteSessionId
+          ? salesAreas.map(({ isExpanded, ...areaConfig }) => ({
+              ...areaConfig,
+              unidadNegocio,
+              tipoCliente,
+              impuestos: taxConfig,
+            }))
+          : [
+              {
+                unidadNegocio,
+                tipoCliente,
+              },
+            ];
 
       const avanceFinal = existingAvance || {
         empresa: {
@@ -476,10 +481,8 @@ export function CreateSessionPage() {
               onSubmit={handleCreateSession}
               className="space-y-8 animate-in fade-in"
             >
-              {/* --- LÓGICA DIVIDIDA: VISTA PROMOCIÓN vs VISTA CREACIÓN --- */}
               {promoteSessionId ? (
                 <div className="space-y-6">
-                  {/* BANNER RÁPIDO DE PROMOCIÓN */}
                   <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-5 flex flex-col md:flex-row justify-between md:items-center gap-4 shadow-sm">
                     <div>
                       <Badge className="bg-emerald-600 mb-2 border-0">
@@ -503,7 +506,6 @@ export function CreateSessionPage() {
                     </div>
                   </div>
 
-                  {/* PARÁMETROS COMERCIALES INICIALES */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 pt-4">
                     <div className="space-y-1.5">
                       <Label className="text-sm font-semibold text-slate-800">
@@ -543,7 +545,6 @@ export function CreateSessionPage() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* FORMULARIO ESTÁNDAR PARA NUEVA SESIÓN */}
                   <div className="grid grid-cols-2 gap-4">
                     <div
                       onClick={() => {
@@ -646,7 +647,6 @@ export function CreateSessionPage() {
 
               {workflow === "onboarding" && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                  {/* IMPUESTOS */}
                   <div className="bg-white border border-slate-200 rounded-md overflow-hidden shadow-sm transition-all duration-300">
                     <div
                       className="bg-slate-50/80 px-5 py-3 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-colors"
@@ -751,7 +751,6 @@ export function CreateSessionPage() {
                     )}
                   </div>
 
-                  {/* ÁREAS DE VENTA */}
                   <div className="bg-white border border-indigo-100 rounded-md overflow-hidden shadow-sm transition-all duration-300">
                     <div
                       className="bg-indigo-50/50 px-5 py-3 border-b border-indigo-100 flex items-center justify-between cursor-pointer hover:bg-indigo-50 transition-colors"
