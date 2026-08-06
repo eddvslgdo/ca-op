@@ -47,6 +47,9 @@ export function OnboardingPortal() {
   const [workflow, setWorkflow] = useState<"lead" | "onboarding">("lead");
   const [dbSessionId, setDbSessionId] = useState("");
 
+  // NUEVO: Estado para almacenar al propietario (ejecutivo)
+  const [propietario, setPropietario] = useState("No asignado");
+
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
@@ -117,6 +120,9 @@ export function OnboardingPortal() {
           setInvalidToken(true);
         } else {
           setSessionStatus(data.status);
+
+          // Recuperamos el propietario para enviarlo en los correos
+          setPropietario(data.propietario || "No asignado");
 
           // DESEMPAQUETAMOS EL JSON DE CORRECCIONES
           if (data.notas_correccion) {
@@ -348,6 +354,24 @@ export function OnboardingPortal() {
             resultado: "Exitoso",
           },
         ]);
+
+        // --- NUEVO: CORREO DE ALERTA PARA EL EQUIPO SAC ---
+        await supabase.functions
+          .invoke("enviar-correo", {
+            body: {
+              tipo: "sac_alert",
+              destinatario: "ehdzvs01@gmail.com", // <--- CAMBIA ESTO AL CORREO DE TU EQUIPO SAC
+              datos: {
+                razonSocial:
+                  finalFormData.empresa.razonSocial || "Cliente en proceso",
+                sessionId: dbSessionId || token,
+                propietario: propietario,
+                mensajeAlerta:
+                  "El cliente ha completado su captura (o correcciones) y ha enviado su expediente para revisión de SAC.",
+              },
+            },
+          })
+          .catch(console.error);
 
         setIsSubmitted(true);
       }
