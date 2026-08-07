@@ -196,38 +196,48 @@ export function SacWorkspace({
     }));
   };
 
-const confirmAlertAction = async () => {
+  const confirmAlertAction = async () => {
     if (!activeAlert) return;
-    
+
     // Obtenemos los datos del cliente actual de forma segura para los correos
-    const correoCliente = currentSession?.ultimoAvance?.contacto?.correoContacto;
-    const razonSocialCliente = currentSession?.ultimoAvance?.empresa?.razonSocial || "Cliente";
+    const correoCliente =
+      currentSession?.ultimoAvance?.contacto?.correoContacto;
+    const razonSocialCliente =
+      currentSession?.ultimoAvance?.empresa?.razonSocial || "Cliente";
 
     switch (activeAlert.type) {
       case "sync":
         onSyncSessionToCRM(activeAlert.sessionId);
-        setSuccessMessage({ title: "Sincronización Iniciada", desc: "Se está generando el ID en SAP/CRM." });
+        setSuccessMessage({
+          title: "Sincronización Iniciada",
+          desc: "Se está generando el ID en SAP/CRM.",
+        });
         setTimeout(() => setSuccessMessage(null), 3500);
         break;
-      
+
       case "approve":
         onApproveSession(activeAlert.sessionId);
         setIsFullDetailsOpen(false);
         setSelectedSession(null);
-        setSuccessMessage({ title: "¡Expediente Aprobado!", desc: "El cliente ha sido validado y creado con éxito." });
-        
+        setSuccessMessage({
+          title: "¡Expediente Aprobado!",
+          desc: "El cliente ha sido validado y creado con éxito.",
+        });
+
         // --- NUEVO: ENVÍO DE CORREO (APROBACIÓN) ---
         if (correoCliente) {
-          supabase.functions.invoke('enviar-correo', {
-            body: {
-              tipo: 'approved',
-              destinatario: correoCliente,
-              datos: {
-                crmId: currentSession?.crmProspectId || "ID en proceso",
-                propietario: currentSession?.propietario || "No asignado"
-              }
-            }
-          }).catch(console.error); // Usamos catch para que no detenga la UI si el correo falla
+          supabase.functions
+            .invoke("enviar-correo", {
+              body: {
+                tipo: "approved",
+                destinatario: correoCliente,
+                datos: {
+                  crmId: currentSession?.crmProspectId || "ID en proceso",
+                  propietario: currentSession?.propietario || "No asignado",
+                },
+              },
+            })
+            .catch(console.error); // Usamos catch para que no detenga la UI si el correo falla
         }
 
         setTimeout(() => setSuccessMessage(null), 4000);
@@ -238,18 +248,24 @@ const confirmAlertAction = async () => {
         try {
           let updatePayload: any = {
             status: "corrections_requested",
-            notas_correccion: JSON.stringify(correctionNotesMap)
+            notas_correccion: JSON.stringify(correctionNotesMap),
           };
 
-          if (correctionNotesMap["entregas"] !== undefined && currentSession?.ultimoAvance?.direccionesEntrega) {
-            const resetDirecciones = currentSession.ultimoAvance.direccionesEntrega.map((planta: any) => ({
-              ...planta,
-              validada: false
-            }));
-            
+          if (
+            correctionNotesMap["entregas"] !== undefined &&
+            currentSession?.ultimoAvance?.direccionesEntrega
+          ) {
+            const resetDirecciones =
+              currentSession.ultimoAvance.direccionesEntrega.map(
+                (planta: any) => ({
+                  ...planta,
+                  validada: false,
+                }),
+              );
+
             updatePayload.ultimo_avance = {
               ...currentSession.ultimoAvance,
-              direccionesEntrega: resetDirecciones
+              direccionesEntrega: resetDirecciones,
             };
           }
 
@@ -257,50 +273,57 @@ const confirmAlertAction = async () => {
             .from("sessions")
             .update(updatePayload)
             .eq("session_id", activeAlert.sessionId);
-            
+
           if (error) throw error;
           if (onRefresh) onRefresh();
 
           // --- NUEVO: ENVÍO DE CORREO (CORRECCIONES) ---
           if (correoCliente && currentSession?.token) {
-            supabase.functions.invoke('enviar-correo', {
-              body: {
-                tipo: 'corrections',
-                destinatario: correoCliente,
-                datos: {
-                  razonSocial: razonSocialCliente,
-                  notasMap: correctionNotesMap,
-                  magicLink: `${window.location.origin}/registro/magic-link?token=${currentSession.token}`
-                }
-              }
-            }).catch(console.error);
+            supabase.functions
+              .invoke("enviar-correo", {
+                body: {
+                  tipo: "corrections",
+                  destinatario: correoCliente,
+                  datos: {
+                    razonSocial: razonSocialCliente,
+                    notasMap: correctionNotesMap,
+                    magicLink: `${window.location.origin}/registro/magic-link?token=${currentSession.token}`,
+                  },
+                },
+              })
+              .catch(console.error);
           }
-
         } catch (err) {
           console.error("Error al actualizar estado a corrección:", err);
         }
-        
+
         onRequestCorrections(
           activeAlert.sessionId,
           Object.keys(correctionNotesMap),
           JSON.stringify(correctionNotesMap),
         );
-        
+
         setIsFullDetailsOpen(false);
         setSelectedSession(null);
-        setSuccessMessage({ title: "Correcciones Solicitadas", desc: "El cliente ha sido notificado para arreglar su expediente." });
+        setSuccessMessage({
+          title: "Correcciones Solicitadas",
+          desc: "El cliente ha sido notificado para arreglar su expediente.",
+        });
         setTimeout(() => setSuccessMessage(null), 4000);
         break;
 
       case "validate_planta":
         if (activeAlert.plantaIndex !== undefined) {
-          executeToggleValidatePlanta(activeAlert.sessionId, activeAlert.plantaIndex);
+          executeToggleValidatePlanta(
+            activeAlert.sessionId,
+            activeAlert.plantaIndex,
+          );
         }
         break;
     }
     setActiveAlert(null);
   };
-  
+
   const getFaseMacro = (sess: MagicLinkSession) => {
     if (sess.status === "approved") {
       return {
@@ -339,9 +362,7 @@ const confirmAlertAction = async () => {
             <h1 className="text-base font-bold tracking-tight">
               SAC Control Portal
             </h1>
-            <p className="text-xs text-slate-400">
-              Orquestador de Sesiones B2B
-            </p>
+            <p className="text-xs text-slate-400">Sesiones</p>
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs">
@@ -1108,17 +1129,18 @@ const confirmAlertAction = async () => {
 
                       <div className="col-span-2 mt-2 pt-2 border-t border-slate-100">
                         <span className="text-slate-500 text-xs block mb-0.5">
-                          Representante Legal:
+                          Contacto Principal:
                         </span>
                         <p className="font-medium text-slate-900 text-sm">
                           {currentSession.ultimoAvance?.contacto
                             ?.nombreRepresentante || "No especificado"}
                         </p>
                       </div>
-                      <div>
+                      <div className="col-span-2">
                         <span className="text-slate-500 text-xs block mb-0.5">
                           Correo Electrónico:
                         </span>
+                        {/* Quitamos el break-all para que no se parta */}
                         <p className="font-medium text-slate-900 text-sm">
                           {
                             currentSession.ultimoAvance?.contacto
@@ -1126,7 +1148,7 @@ const confirmAlertAction = async () => {
                           }
                         </p>
                       </div>
-                      <div>
+                      <div className="col-span-2">
                         <span className="text-slate-500 text-xs block mb-0.5">
                           Teléfono:
                         </span>
@@ -1547,7 +1569,7 @@ const confirmAlertAction = async () => {
                               className="h-6 text-[10px] gap-1 px-2 bg-emerald-50 text-emerald-700 border-emerald-300"
                             >
                               <Check className="h-3 w-3 text-emerald-600" />{" "}
-                              Validada por defecto
+                              Validada
                             </Badge>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700 border-t border-slate-100 pt-3">
@@ -1834,7 +1856,7 @@ const confirmAlertAction = async () => {
                     className="bg-emerald-600 hover:bg-emerald-700 text-white h-10 shadow-md font-bold px-6 transition-all disabled:opacity-50"
                   >
                     <ArrowUpRight className="h-4 w-4 mr-2" /> Promover a
-                    Onboarding B2B
+                    Onboarding
                   </Button>
                 ) : (
                   <Button

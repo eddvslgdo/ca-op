@@ -267,15 +267,13 @@ export function CreateSessionPage() {
     delete (currentConfig as any).isExpanded;
 
     try {
-      const { error } = await supabase
-        .from("commercial_profiles")
-        .insert([
-          {
-            profile_key: newKey,
-            profile_name: profileName,
-            config: currentConfig,
-          },
-        ]);
+      const { error } = await supabase.from("commercial_profiles").insert([
+        {
+          profile_key: newKey,
+          profile_name: profileName,
+          config: currentConfig,
+        },
+      ]);
       if (error) throw error;
       setSavedProfiles((p) => ({
         ...p,
@@ -298,36 +296,62 @@ export function CreateSessionPage() {
     }
   };
 
-const handleCreateSession = async (e: React.FormEvent) => {
+  const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
     setPageStep("loading");
 
     try {
       const highEntropyToken = `${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`;
-      const rawSessionId = promoteSessionId || `SES-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      const rawSessionId =
+        promoteSessionId ||
+        `SES-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
-      const configComercialFinal = workflow === "onboarding" || promoteSessionId
-        ? salesAreas.map(({ isExpanded, ...areaConfig }) => ({
-            ...areaConfig,
-            unidadNegocio,
-            tipoCliente,
-            impuestos: taxConfig,
-          }))
-        : [
-            {
+      const configComercialFinal =
+        workflow === "onboarding" || promoteSessionId
+          ? salesAreas.map(({ isExpanded, ...areaConfig }) => ({
+              ...areaConfig,
               unidadNegocio,
               tipoCliente,
-            }
-          ];
+              impuestos: taxConfig,
+            }))
+          : [
+              {
+                unidadNegocio,
+                tipoCliente,
+              },
+            ];
 
       const avanceFinal = existingAvance || {
-        empresa: { razonSocial: "", rfc: "", regimenFiscal: "", usoCFDI: "", giroComercial: "" },
-        direccionFiscal: { calle: "", numeroExterior: "", colonia: "", codigoPostal: "", estado: "", municipio: "" },
+        empresa: {
+          razonSocial: "",
+          rfc: "",
+          regimenFiscal: "",
+          usoCFDI: "",
+          giroComercial: "",
+        },
+        direccionFiscal: {
+          calle: "",
+          numeroExterior: "",
+          colonia: "",
+          codigoPostal: "",
+          estado: "",
+          municipio: "",
+        },
         direccionesEntrega: [],
-        contacto: { nombreRepresentante: "", correoContacto: contactEmail, telefonoContacto: phoneNumber },
-        facturacion: { banco: "", cuenta4Digitos: "", metodoPago: "", formaPago: "", correoFacturas: "" },
+        contacto: {
+          nombreRepresentante: "",
+          correoContacto: contactEmail,
+          telefonoContacto: phoneNumber,
+        },
+        facturacion: {
+          banco: "",
+          cuenta4Digitos: "",
+          metodoPago: "",
+          formaPago: "",
+          correoFacturas: "",
+        },
       };
 
       if (promoteSessionId) {
@@ -336,7 +360,7 @@ const handleCreateSession = async (e: React.FormEvent) => {
           .update({
             workflow: "onboarding",
             status: "active",
-            propietario, 
+            propietario,
             config_comercial: configComercialFinal,
             token: highEntropyToken,
             expires_at: expiresAt.toISOString(),
@@ -362,18 +386,19 @@ const handleCreateSession = async (e: React.FormEvent) => {
           },
         ]);
 
-        // --- NUEVO: ENVÍO DE CORREO (ONBOARDING) ---
-        await supabase.functions.invoke('enviar-correo', {
+        // --- ENVÍO DE CORREO (PROMOVER A ONBOARDING) ---
+        await supabase.functions.invoke("enviar-correo", {
           body: {
-            tipo: 'onboarding_invite',
+            tipo: "onboarding_invite",
             destinatario: contactEmail,
             datos: {
               razonSocial: avanceFinal.empresa.razonSocial || "Nuevo Prospecto",
-              magicLink: `${window.location.origin}/registro/magic-link?token=${highEntropyToken}`
-            }
-          }
+              magicLink: `${window.location.origin}/registro/magic-link?token=${highEntropyToken}`,
+              nombreRepresentante: avanceFinal.contacto?.nombreRepresentante,
+            },
+          },
         });
-
+        
       } else {
         const { error: insertError } = await supabase.from("sessions").insert([
           {
@@ -400,16 +425,20 @@ const handleCreateSession = async (e: React.FormEvent) => {
           },
         ]);
 
-        // --- NUEVO: ENVÍO DE CORREO (LEAD) ---
-        await supabase.functions.invoke('enviar-correo', {
+        // --- ENVÍO DE CORREO (CREACIÓN DESDE CERO DINÁMICA) ---
+        await supabase.functions.invoke("enviar-correo", {
           body: {
-            tipo: 'lead_invite',
+            tipo:
+              workflow === "onboarding"
+                ? "direct_onboarding_invite"
+                : "lead_invite",
             destinatario: contactEmail,
             datos: {
-              razonSocial: "Nuevo Prospecto",
-              magicLink: `${window.location.origin}/registro/magic-link?token=${highEntropyToken}`
-            }
-          }
+              razonSocial: avanceFinal.empresa.razonSocial || "Nuevo Prospecto",
+              magicLink: `${window.location.origin}/registro/magic-link?token=${highEntropyToken}`,
+              nombreRepresentante: avanceFinal.contacto?.nombreRepresentante,
+            },
+          },
         });
       }
 
