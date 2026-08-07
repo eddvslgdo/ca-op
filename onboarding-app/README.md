@@ -1,75 +1,71 @@
-# React + TypeScript + Vite
+# 🚀 Portal SAC & Onboarding de Clientes - Grupo Polak (MVP)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Sistema de gestión de sesiones, generación de accesos seguros (**Magic Links**) y automatización de expedientes comerciales para prospectos y clientes de **Grupo Polak**.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 📌 Descripción del Proyecto
 
-## React Compiler
+El **Portal SAC** permite al equipo de Servicio y Atención al Cliente (SAC) y Ejecutivos de Ventas generar enlaces temporales con alta entropía (válidos por 72 horas) para que los clientes externos puedan capturar su información fiscal, bancaria y subir documentos comerciales sin necesidad de contraseñas.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+El sistema administra todo el ciclo de vida del alta de cliente: desde un prospecto comercial (*Lead*) hasta la aprobación final del expediente comercial.
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 🛠️ Stack Tecnológico
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+* **Frontend:** React, TypeScript, Tailwind CSS, Lucide Icons, Shadcn/UI components.
+* **Routing:** React Router DOM.
+* **Backend & Database:** Supabase (PostgreSQL, Row Level Security, Storage, Audit Logs).
+* **Serverless / Edge Functions:** Supabase Edge Functions (Deno Runtime).
+* **Servicio de Correos:** Nodemailer vía SMTP (Gmail) configurado dentro de Supabase Edge Functions.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+---
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## ✨ Funcionalidades Clave
 
-```
+1. **Gestión de Sesiones & Magic Links:**
+   * Generación de tokens de alta entropía con caducidad de 72 horas.
+   * Modos de flujo: **Prospecto (Lead)** u **Onboarding Completo**.
+   * Promoción de sesión: Convertir un Lead existente a Onboarding Completo reutilizando los datos previamente capturados.
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+2. **Configuración Comercial (CRM / SAP):**
+   * Asignación de Ejecutivos/Propietarios de la cuenta.
+   * Parametrización de Organización de Ventas, Canales de Distribución, Incoterms, Moneda, etc.
+   * Clasificación fiscal SAP (MWST IVA / ZMX1 IEPS).
+   * Guardado y aplicación de **Perfiles Comerciales** reutilizables en la nube.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+3. **Correos Transaccionales Automáticos:**
+   * Plantillas HTML dinámicas y responsivas con bloque unificado de soporte al cliente.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+4. **Bitácora de Auditoría:**
+   * Registro automático en la tabla `audit_logs` para rastrear creaciones, promociones y cambios de estatus.
 
-```
+---
+
+## 📂 Estructura de Archivos del Proyecto
+
+```text
+├── src/
+│   ├── components/
+│   │   ├── onboarding/       # Pasos del cliente (StepCompany, StepAddress, StepBilling, StepDelivery, etc.)
+│   │   ├── sac/              # Modales de administración (LinkGeneratorModal, etc.)
+│   │   └── ui/               # Componentes de diseño base (badge, button, card, input, label, table, etc.)
+│   ├── lib/                  # Cliente de Supabase (`supabase.ts`) y utilidades (`utils.ts`)
+│   ├── pages/                # Vistas principales de la aplicación
+│   │   ├── CreateSessionPage.tsx # Formulario de creación/promoción de sesiones y correos
+│   │   ├── OnboardingPortal.tsx  # Portal interactivo para que el cliente llene su expediente
+│   │   ├── PublicLeadForm.tsx    # Formulario de registro básico para prospectos (Leads)
+│   │   ├── SacWorkspace.tsx      # Tablero principal de control para el equipo SAC
+│   │   ├── StepDocuments.tsx     # Carga e inspección de documentos
+│   │   └── StepSummary.tsx       # Resumen final del expediente
+│   ├── services/             # Lógica de servicios y conectores
+│   ├── types/                # Interfaces y definición de tipos TypeScript (`onboarding.ts`)
+│   ├── App.tsx               # Enrutador y layout principal
+│   ├── main.tsx              # Punto de entrada de React
+│   └── index.css             # Estilos globales y Tailwind CSS
+├── supabase/
+│   └── functions/
+│       └── enviar-correo/
+│           └── index.ts      # Edge Function para envío de correos con Nodemailer
+└── README.md
