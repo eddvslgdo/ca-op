@@ -100,6 +100,31 @@ export function SacWorkspace({
     ? sessions.find((s) => s.sessionId === selectedSession.sessionId) || null
     : null;
 
+  // --- NUEVA FUNCIÓN: VALIDACIÓN DE FECHA REAL ---
+  const isSessionExpired = (sess: MagicLinkSession) => {
+    if (sess.status === "expired") return true;
+    if (sess.status === "completed_by_client" || sess.status === "approved")
+      return false;
+
+    if (sess.fechaExpiracion) {
+      const partes = sess.fechaExpiracion.split("/");
+      if (partes.length === 3) {
+        const dia = parseInt(partes[0], 10);
+        const mes = parseInt(partes[1], 10) - 1; // Meses en JS son de 0 a 11
+        const anio = parseInt(partes[2], 10);
+        // Validamos contra el final del día (23:59:59)
+        const fechaExp = new Date(anio, mes, dia, 23, 59, 59);
+        return fechaExp < new Date(); // Si hoy es mayor a la expiración = true
+      }
+    }
+    return false;
+  };
+
+  const isCurrentExpired = currentSession
+    ? isSessionExpired(currentSession)
+    : false;
+  // -----------------------------------------------
+
   const handleCopy = (token: string) => {
     navigator.clipboard.writeText(
       `${window.location.origin}/registro/magic-link?token=${token}`,
@@ -169,14 +194,6 @@ export function SacWorkspace({
     });
   };
 
-  const CORRECTION_OPTIONS = [
-    { id: "empresa", label: "Datos de Empresa", icon: Building2 },
-    { id: "domicilio", label: "Domicilio Fiscal", icon: MapPin },
-    { id: "entregas", label: "Destinatarios", icon: Truck },
-    { id: "facturacion", label: "Datos Bancarios", icon: CreditCard },
-    { id: "documentos", label: "Documentos Adjuntos", icon: FileText },
-  ];
-
   const toggleCorrectionSection = (sectionId: string) => {
     setCorrectionNotesMap((prev) => {
       const newMap = { ...prev };
@@ -199,7 +216,6 @@ export function SacWorkspace({
   const confirmAlertAction = async () => {
     if (!activeAlert) return;
 
-    // Obtenemos los datos del cliente actual de forma segura para los correos
     const correoCliente =
       currentSession?.ultimoAvance?.contacto?.correoContacto;
     const razonSocialCliente =
@@ -224,7 +240,6 @@ export function SacWorkspace({
           desc: "El cliente ha sido validado y creado con éxito.",
         });
 
-        // --- NUEVO: ENVÍO DE CORREO (APROBACIÓN) ---
         if (correoCliente) {
           supabase.functions
             .invoke("enviar-correo", {
@@ -237,7 +252,7 @@ export function SacWorkspace({
                 },
               },
             })
-            .catch(console.error); // Usamos catch para que no detenga la UI si el correo falla
+            .catch(console.error);
         }
 
         setTimeout(() => setSuccessMessage(null), 4000);
@@ -277,7 +292,6 @@ export function SacWorkspace({
           if (error) throw error;
           if (onRefresh) onRefresh();
 
-          // --- NUEVO: ENVÍO DE CORREO (CORRECCIONES) ---
           if (correoCliente && currentSession?.token) {
             supabase.functions
               .invoke("enviar-correo", {
@@ -437,6 +451,8 @@ export function SacWorkspace({
               <TableBody>
                 {sessions.map((sess) => {
                   const fase = getFaseMacro(sess);
+                  const isExpired = isSessionExpired(sess); // Evaluamos fecha real
+
                   return (
                     <TableRow
                       key={sess.sessionId}
@@ -464,7 +480,7 @@ export function SacWorkspace({
 
                       <TableCell>
                         <div className="flex flex-col gap-2 items-start">
-                          {sess.status === "active" && (
+                          {sess.status === "active" && !isExpired && (
                             <Badge
                               variant="outline"
                               className="text-xs py-1 px-2 bg-slate-50 text-slate-600 border-slate-300"
@@ -482,15 +498,16 @@ export function SacWorkspace({
                               Por Validar (SAC)
                             </Badge>
                           )}
-                          {sess.status === "corrections_requested" && (
-                            <Badge
-                              variant="outline"
-                              className="text-xs py-1 px-2 bg-orange-50 text-orange-700 border-orange-200"
-                            >
-                              <AlertTriangle className="h-3 w-3 mr-1.5" /> En
-                              Corrección
-                            </Badge>
-                          )}
+                          {sess.status === "corrections_requested" &&
+                            !isExpired && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs py-1 px-2 bg-orange-50 text-orange-700 border-orange-200"
+                              >
+                                <AlertTriangle className="h-3 w-3 mr-1.5" /> En
+                                Corrección
+                              </Badge>
+                            )}
                           {sess.status === "approved" && (
                             <Badge
                               variant="outline"
@@ -500,15 +517,17 @@ export function SacWorkspace({
                               Cerrado
                             </Badge>
                           )}
-                          {sess.status === "expired" && (
-                            <Badge
-                              variant="outline"
-                              className="text-xs py-1 px-2 bg-red-50 text-red-700 border-red-200"
-                            >
-                              <XCircle className="h-3 w-3 mr-1.5" /> Enlace
-                              Vencido
-                            </Badge>
-                          )}
+                          {isExpired &&
+                            sess.status !== "completed_by_client" &&
+                            sess.status !== "approved" && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs py-1 px-2 bg-red-50 text-red-700 border-red-200"
+                              >
+                                <XCircle className="h-3 w-3 mr-1.5" /> Enlace
+                                Vencido
+                              </Badge>
+                            )}
 
                           {sess.crmProspectId ? (
                             <Badge
@@ -570,22 +589,18 @@ export function SacWorkspace({
                                   onReactivateSession(sess.sessionId);
                                 }}
                                 size="sm"
-                                disabled={sess.status !== "expired"}
-                                variant={
-                                  sess.status === "expired"
-                                    ? "default"
-                                    : "outline"
-                                }
+                                disabled={!isExpired}
+                                variant={isExpired ? "default" : "outline"}
                                 className={`text-xs gap-1.5 h-8 transition-all ${
-                                  sess.status === "expired"
+                                  isExpired
                                     ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-md border-0"
                                     : "bg-slate-50 border-slate-200 text-slate-400 shadow-none cursor-not-allowed opacity-70"
                                 }`}
                               >
                                 <RefreshCw
-                                  className={`h-3.5 w-3.5 ${sess.status === "expired" ? "animate-pulse" : ""}`}
+                                  className={`h-3.5 w-3.5 ${isExpired ? "animate-pulse" : ""}`}
                                 />{" "}
-                                {sess.status === "expired"
+                                {isExpired
                                   ? "Reactivar Enlace"
                                   : "Enlace Vigente"}
                               </Button>
@@ -732,7 +747,7 @@ export function SacWorkspace({
                     <span className="text-[10px] text-slate-500">
                       Expira:{" "}
                       <strong
-                        className={`${currentSession.status === "expired" ? "text-red-600" : "text-slate-700"}`}
+                        className={`${isCurrentExpired ? "text-red-600" : "text-slate-700"}`}
                       >
                         {currentSession.fechaExpiracion}
                       </strong>
@@ -745,20 +760,16 @@ export function SacWorkspace({
                             onReactivateSession(currentSession.sessionId)
                           }
                           size="sm"
-                          disabled={currentSession.status !== "expired"}
-                          variant={
-                            currentSession.status === "expired"
-                              ? "default"
-                              : "ghost"
-                          }
+                          disabled={!isCurrentExpired}
+                          variant={isCurrentExpired ? "default" : "ghost"}
                           className={`h-6 text-[10px] gap-1 px-2 transition-all ${
-                            currentSession.status === "expired"
+                            isCurrentExpired
                               ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
                               : "text-slate-400 hover:bg-transparent cursor-not-allowed opacity-70"
                           }`}
                         >
                           <RefreshCw className="h-3 w-3" />{" "}
-                          {currentSession.status === "expired"
+                          {isCurrentExpired
                             ? "Reactivar (+3 Días)"
                             : "Enlace Vigente"}
                         </Button>
@@ -1108,7 +1119,7 @@ export function SacWorkspace({
                         <>
                           <div>
                             <span className="text-slate-500 text-xs block mb-0.5">
-                              Uso CFDI:
+                              Uuso CFDI:
                             </span>
                             <p className="font-medium text-slate-900 text-sm">
                               {currentSession.ultimoAvance?.empresa?.usoCFDI ||
@@ -1140,7 +1151,6 @@ export function SacWorkspace({
                         <span className="text-slate-500 text-xs block mb-0.5">
                           Correo Electrónico:
                         </span>
-                        {/* Quitamos el break-all para que no se parta */}
                         <p className="font-medium text-slate-900 text-sm">
                           {
                             currentSession.ultimoAvance?.contacto
@@ -1818,12 +1828,13 @@ export function SacWorkspace({
               </div>
 
               <div className="flex items-center gap-3">
-                {currentSession.status === "active" ? (
+                {currentSession.status === "active" && !isCurrentExpired ? (
                   <p className="text-sm font-medium text-slate-500 flex items-center gap-2">
                     <Clock className="h-4 w-4" /> El cliente está capturando la
                     información...
                   </p>
-                ) : currentSession.status === "corrections_requested" ? (
+                ) : currentSession.status === "corrections_requested" &&
+                  !isCurrentExpired ? (
                   <p className="text-sm font-bold text-orange-600 flex items-center gap-2 px-4">
                     <AlertTriangle className="h-4 w-4" /> Esperando correcciones
                     del cliente.
@@ -1832,6 +1843,12 @@ export function SacWorkspace({
                   <Badge className="bg-emerald-600 text-white h-10 px-6 text-sm gap-2 font-bold shadow-sm border-0">
                     <Check className="h-4 w-4" /> Expediente Aprobado
                   </Badge>
+                ) : isCurrentExpired &&
+                  currentSession.status !== "completed_by_client" &&
+                  currentSession.status !== "approved" ? (
+                  <p className="text-sm font-bold text-red-600 flex items-center gap-2 px-4">
+                    <XCircle className="h-4 w-4" /> El enlace ya expiró.
+                  </p>
                 ) : Object.keys(correctionNotesMap).length > 0 ? (
                   <Button
                     onClick={() =>

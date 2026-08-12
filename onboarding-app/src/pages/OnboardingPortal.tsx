@@ -119,6 +119,25 @@ export function OnboardingPortal() {
         if (error || !data) {
           setInvalidToken(true);
         } else {
+          // --- NUEVO: VALIDACIÓN DE FECHA REAL (SEGURIDAD) ---
+          const isExpiredStatus = data.status === "expired";
+          // Usamos expires_at (ISO String) para una comparación matemática exacta
+          const isPastDate = data.expires_at
+            ? new Date() > new Date(data.expires_at)
+            : false;
+
+          // Si ya expiró por fecha o estatus, y no ha sido completado ni aprobado, lo bloqueamos.
+          if (
+            (isExpiredStatus || isPastDate) &&
+            data.status !== "completed_by_client" &&
+            data.status !== "approved"
+          ) {
+            setInvalidToken(true);
+            setIsLoading(false);
+            return; // Detenemos la ejecución aquí
+          }
+          // ---------------------------------------------------
+
           setSessionStatus(data.status);
 
           // Recuperamos el propietario para enviarlo en los correos
