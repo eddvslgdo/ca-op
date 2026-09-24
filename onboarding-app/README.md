@@ -1,4 +1,8 @@
-# 🚀 Portal SAC & Onboarding de Clientes - Grupo Polak (MVP)
+# Portal SAC & Onboarding de Clientes — CA&OP MVP
+
+> La guía principal del repositorio está en [`../README.md`](../README.md). Este documento resume
+> el frontend. Las integraciones CRM, SAP, OCR y repositorio documental aún no son productivas.
+> El identificador `SIM-CRM-*` y Mailpit existen exclusivamente para demostrar el flujo local.
 
 Sistema de gestión de sesiones, generación de accesos seguros (**Magic Links**) y automatización de expedientes comerciales para prospectos y clientes de **Grupo Polak**.
 
@@ -18,7 +22,7 @@ El sistema administra todo el ciclo de vida del alta de cliente: desde un prospe
 * **Routing:** React Router DOM.
 * **Backend & Database:** Supabase (PostgreSQL, Row Level Security, Storage, Audit Logs).
 * **Serverless / Edge Functions:** Supabase Edge Functions (Deno Runtime).
-* **Servicio de Correos:** Nodemailer vía SMTP (Gmail) configurado dentro de Supabase Edge Functions.
+* **Servicio de Correos:** Nodemailer vía Mailpit en local; SMTP corporativo pendiente.
 
 ---
 
@@ -59,13 +63,28 @@ El sistema administra todo el ciclo de vida del alta de cliente: desde un prospe
 │   │   ├── SacWorkspace.tsx      # Tablero principal de control para el equipo SAC
 │   │   ├── StepDocuments.tsx     # Carga e inspección de documentos
 │   │   └── StepSummary.tsx       # Resumen final del expediente
-│   ├── services/             # Lógica de servicios y conectores
+│   ├── integrations/         # Contratos CRM y conectores sustituibles
+│   ├── repositories/         # Acceso a Supabase
+│   ├── domain/               # Modelos canónicos
 │   ├── types/                # Interfaces y definición de tipos TypeScript (`onboarding.ts`)
 │   ├── App.tsx               # Enrutador y layout principal
 │   ├── main.tsx              # Punto de entrada de React
 │   └── index.css             # Estilos globales y Tailwind CSS
-├── supabase/
+../supabase/
 │   └── functions/
 │       └── enviar-correo/
 │           └── index.ts      # Edge Function para envío de correos con Nodemailer
 └── README.md
+
+## Ejecución
+
+Desde la raíz del repositorio, inicie Supabase local. Después:
+
+```powershell
+cd onboarding-app
+npm ci
+npm run dev
+```
+
+Consulte [`docs/LOCAL_DEVELOPMENT.md`](docs/LOCAL_DEVELOPMENT.md) para configuración, credenciales
+locales y Mailpit. No copie `.env.local` al repositorio.

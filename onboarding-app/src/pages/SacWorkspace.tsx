@@ -96,6 +96,7 @@ export function SacWorkspace({
   const [successMessage, setSuccessMessage] = useState<{
     title: string;
     desc: string;
+    tone?: "success" | "error";
   } | null>(null);
 
   const currentSession = selectedSession
@@ -239,6 +240,7 @@ export function SacWorkspace({
           setSuccessMessage({
             title: "No fue posible sincronizar",
             desc: errorDescription,
+            tone: "error",
           });
         }
         setTimeout(() => setSuccessMessage(null), 3500);
@@ -1918,13 +1920,22 @@ export function SacWorkspace({
         </div>
       )}
 
-      {/* NOTIFICACIÓN FLOTANTE (TOAST) DE ÉXITO */}
+      {/* NOTIFICACIÓN FLOTANTE DE RESULTADO */}
       {successMessage && (
-        <div className="fixed bottom-6 right-6 z-[100] bg-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-5">
-          <CheckCircle2 className="h-6 w-6" />
+        <div
+          role={successMessage.tone === "error" ? "alert" : "status"}
+          className={`fixed bottom-6 right-6 z-[100] text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-5 ${
+            successMessage.tone === "error" ? "bg-red-600" : "bg-emerald-600"
+          }`}
+        >
+          {successMessage.tone === "error" ? (
+            <AlertTriangle className="h-6 w-6" />
+          ) : (
+            <CheckCircle2 className="h-6 w-6" />
+          )}
           <div>
             <h4 className="font-bold text-sm">{successMessage.title}</h4>
-            <p className="text-xs text-emerald-100">{successMessage.desc}</p>
+            <p className="text-xs text-white/85">{successMessage.desc}</p>
           </div>
         </div>
       )}

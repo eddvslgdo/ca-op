@@ -17,14 +17,37 @@ serve(async (req) => {
     const body = await req.json()
     const { tipo, destinatario, datos } = body
 
-    // 1. Configuramos Nodemailer con tu Gmail (Las credenciales las pondremos en las variables de entorno de Supabase)
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: Deno.env.get('GMAIL_USER'), // Ej: notificaciones@grupopolak.com
-        pass: Deno.env.get('GMAIL_PASS')  // La contraseña de 16 letras del Paso 1
-      }
-    })
+    const allowedTypes = new Set([
+      'lead_invite',
+      'onboarding_invite',
+      'direct_onboarding_invite',
+      'corrections',
+      'approved',
+      'sac_alert',
+    ])
+    if (!allowedTypes.has(tipo)) throw new Error('Tipo de correo no válido')
+    if (typeof destinatario !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinatario)) {
+      throw new Error('Destinatario no válido')
+    }
+    if (!datos || typeof datos !== 'object') throw new Error('Faltan datos de la plantilla')
+
+    // Sin credenciales Gmail se usa automáticamente Mailpit dentro del stack local.
+    const gmailUser = Deno.env.get('GMAIL_USER')
+    const gmailPass = Deno.env.get('GMAIL_PASS')
+    const smtpHost = Deno.env.get('SMTP_HOST') || 'inbucket'
+    const smtpPort = Number(Deno.env.get('SMTP_PORT') || '1025')
+    const usesGmail = Boolean(gmailUser && gmailPass)
+    const transporter = usesGmail
+      ? nodemailer.createTransport({
+          service: 'gmail',
+          auth: { user: gmailUser, pass: gmailPass },
+        })
+      : nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: false,
+          ignoreTLS: true,
+        })
 
     let asunto = ""
     let html = ""
@@ -44,6 +67,7 @@ serve(async (req) => {
         `
         break;
 
+      case 'direct_onboarding_invite':
       case 'onboarding_invite':
         asunto = "Continúa tu proceso de registro - Familia Grupo Polak"
         html = `
@@ -104,26 +128,29 @@ serve(async (req) => {
         `
         break;
 
-      default:
-        throw new Error("Tipo de correo no válido")
     }
 
     // 3. Enviamos el correo
     await transporter.sendMail({
-      from: `"Portal SAC Polak" <${Deno.env.get('GMAIL_USER')}>`,
+      from: `"Portal SAC Polak" <${gmailUser || 'portal@ca-op.local'}>`,
       to: destinatario,
       subject: asunto,
       html: html
     })
 
-    return new Response(JSON.stringify({ success: true, message: "Correo enviado" }), {
+    return new Response(JSON.stringify({
+      success: true,
+      message: usesGmail ? 'Correo enviado' : 'Correo capturado en Mailpit',
+      transport: usesGmail ? 'gmail' : 'mailpit',
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
 
   } catch (error) {
     console.error("Error enviando correo:", error)
-    return new Response(JSON.stringify({ error: error.message }), {
+    const message = error instanceof Error ? error.message : 'Error desconocido enviando correo'
+    return new Response(JSON.stringify({ error: message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     })

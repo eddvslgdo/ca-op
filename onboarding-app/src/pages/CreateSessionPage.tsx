@@ -33,6 +33,7 @@ import {
   Save,
   Building2,
   User,
+  AlertTriangle,
 } from "lucide-react";
 import type { MagicLinkSession, SessionWorkflow } from "@/types/onboarding";
 import { supabase } from "@/lib/supabase";
@@ -72,6 +73,7 @@ export function CreateSessionPage() {
   const [pageStep, setPageStep] = useState<"form" | "loading" | "success">(
     "form",
   );
+  const [processingError, setProcessingError] = useState("");
   const [copiedCustom, setCopiedCustom] = useState(false);
 
   const [workflow, setWorkflow] = useState<SessionWorkflow>(
@@ -305,6 +307,7 @@ export function CreateSessionPage() {
 
   const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
+    setProcessingError("");
     setPageStep("loading");
 
     try {
@@ -442,7 +445,11 @@ export function CreateSessionPage() {
       setPageStep("success");
     } catch (error) {
       console.error("Error:", error);
-      alert("Hubo un problema procesando la sesión.");
+      const message =
+        typeof error === "object" && error !== null && "message" in error
+          ? String(error.message)
+          : "Hubo un problema procesando la sesión.";
+      setProcessingError(message);
       setPageStep("form");
     }
   };
@@ -497,6 +504,28 @@ export function CreateSessionPage() {
               onSubmit={handleCreateSession}
               className="space-y-8 animate-in fade-in"
             >
+              {processingError && (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950"
+                >
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold">
+                        No se puede completar la operación
+                      </p>
+                      <p className="text-sm text-amber-800">
+                        {processingError}
+                      </p>
+                      <p className="text-xs text-amber-700">
+                        Revisa la sesión indicada o vuelve al tablero para
+                        reutilizar, cerrar o cancelar el expediente duplicado.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               {promoteSessionId ? (
                 <div className="space-y-6">
                   <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-5 flex flex-col md:flex-row justify-between md:items-center gap-4 shadow-sm">

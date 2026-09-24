@@ -67,6 +67,14 @@ Antes de capturar datos, comprobar en las herramientas del navegador que las pet
 | PostgreSQL | `postgresql://postgres:postgres@127.0.0.1:54322/postgres` |
 | Studio | `http://127.0.0.1:54323` |
 | Mailpit | `http://127.0.0.1:54324` |
+| SMTP local | `127.0.0.1:54325` |
+
+## Probar correos sin envío externo
+
+La función `enviar-correo` usa Mailpit automáticamente cuando no existen
+`GMAIL_USER` y `GMAIL_PASS`. Las invitaciones, correcciones, alertas y aprobaciones
+se capturan en `http://127.0.0.1:54324`, donde puede revisarse el destinatario,
+asunto, HTML y enlace generado. Mailpit no entrega el mensaje a Internet.
 
 ## Detener el entorno
 

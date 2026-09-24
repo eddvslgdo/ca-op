@@ -321,6 +321,14 @@ Flujo normal:
 
 **RN-102 — Minimización.** Las métricas usarán identificadores técnicos y dimensiones no sensibles siempre que sea posible.
 
+**RN-103 — Conflictos visibles.** Una duplicidad de RFC, Prospecto o sesión activa nunca se presentará
+como una falla silenciosa. La operación se bloqueará sin perder la captura y SAC recibirá una alerta
+accionable con la referencia del registro que debe reutilizar, cerrar, corregir o escalar.
+
+**RN-104 — Sin resolución automática ambigua.** Si un RFC existente tiene una razón social u otros
+datos de identidad incompatibles con la nueva captura, CA&OP no fusionará ni reasignará expedientes
+automáticamente. SAC deberá resolver la identidad antes de sincronizar o promover.
+
 ## 20. Flujos funcionales
 
 ### A. Captación sin cotización inmediata
