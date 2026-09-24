@@ -36,6 +36,13 @@ import {
 } from "lucide-react";
 import type { MagicLinkSession, SessionWorkflow } from "@/types/onboarding";
 import { supabase } from "@/lib/supabase";
+import { promoteLeadToOnboarding } from "@/repositories/sessionRepository";
+
+function createSecureToken(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(32)))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 const defaultSalesArea = {
   isExpanded: true,
@@ -301,10 +308,10 @@ export function CreateSessionPage() {
     setPageStep("loading");
 
     try {
-      const highEntropyToken = `${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`;
+      const highEntropyToken = createSecureToken();
       const rawSessionId =
         promoteSessionId ||
-        `SES-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+        crypto.randomUUID();
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
@@ -355,36 +362,12 @@ export function CreateSessionPage() {
       };
 
       if (promoteSessionId) {
-        const { error: updateError } = await supabase
-          .from("sessions")
-          .update({
-            workflow: "onboarding",
-            status: "active",
-            propietario,
-            config_comercial: configComercialFinal,
-            token: highEntropyToken,
-            expires_at: expiresAt.toISOString(),
-            ultimo_avance: {
-              ...avanceFinal,
-              contacto: {
-                ...avanceFinal.contacto,
-                correoContacto: contactEmail,
-                telefonoContacto: phoneNumber,
-              },
-            },
-          })
-          .eq("session_id", promoteSessionId);
-
-        if (updateError) throw updateError;
-
-        await supabase.from("audit_logs").insert([
-          {
-            session_id: promoteSessionId,
-            usuario: "SAC (Operador)",
-            accion: `Promovido a Onboarding Completo`,
-            resultado: "Exitoso",
-          },
-        ]);
+        await promoteLeadToOnboarding(
+          promoteSessionId,
+          highEntropyToken,
+          propietario,
+          configComercialFinal,
+        );
 
         // --- ENVÍO DE CORREO (PROMOVER A ONBOARDING) ---
         await supabase.functions.invoke("enviar-correo", {

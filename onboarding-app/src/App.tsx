@@ -1,10 +1,19 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import type { Session } from "@supabase/supabase-js";
 import { OnboardingPortal } from "@/pages/OnboardingPortal";
 import { SacWorkspace } from "@/pages/SacWorkspace";
 import { CreateSessionPage } from "@/pages/CreateSessionPage";
+import { PublicLeadForm } from "@/pages/PublicLeadForm";
+import { SacLoginPage } from "@/pages/SacLoginPage";
 import type { MagicLinkSession } from "@/types/onboarding";
 import { supabase } from "@/lib/supabase";
+import {
+  appendSessionAudit,
+  listSessions,
+  syncLeadToCrm,
+  updateSession,
+} from "@/repositories/sessionRepository";
 
 // ------------------------------------------------------------------
 // 1. COMPONENTE DEL DASHBOARD DE SAC
@@ -36,133 +45,37 @@ function SacDashboard() {
     };
   }, []);
 
-  const fetchSessions = async () => {
+  async function fetchSessions() {
     try {
-      // 1. Descargamos las sesiones
-      const { data: sessionsData, error: sessionsError } = await supabase
-        .from("sessions")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      // 2. Descargamos TODA la bitácora de auditoría
-      const { data: auditData, error: auditError } = await supabase
-        .from("audit_logs")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (sessionsError) throw sessionsError;
-      if (auditError) throw auditError;
-
-      if (sessionsData) {
-        const sesionesRecuperadas = sessionsData.map((row: any) => {
-          // 3. Filtramos los logs que le pertenecen EXCLUSIVAMENTE a esta sesión
-          const logsDeSesion = auditData
-            ? auditData
-                .filter((log: any) => log.session_id === row.session_id)
-                .map((log: any) => ({
-                  id: log.id,
-                  fechaHora: new Date(log.created_at).toLocaleString("es-MX", {
-                    dateStyle: "short",
-                    timeStyle: "short",
-                  }),
-                  usuario: log.usuario,
-                  accion: log.accion,
-                  resultado: log.resultado,
-                }))
-            : [];
-
-          return {
-            sessionId: row.session_id,
-            workflow: row.workflow,
-            token: row.token,
-            crmProspectId: row.crm_prospect_id,
-            clienteExisteEnCRM: !!row.crm_prospect_id,
-            configComercial: row.config_comercial,
-            propietario: row.propietario, // <--- NUEVO: AQUÍ FALTABA PASAR EL DATO
-            fechaCreacion: new Date(row.created_at).toLocaleDateString("es-MX"),
-            fechaExpiracion: new Date(row.expires_at).toLocaleDateString(
-              "es-MX",
-            ),
-            reactivacionesCount: row.reactivaciones_count,
-            status: row.status,
-            ultimoAvance: row.ultimo_avance,
-            documentosTemporales: {},
-            auditLogs: logsDeSesion,
-          };
-        });
-        setSessions(sesionesRecuperadas);
-      }
+      setSessions(await listSessions());
     } catch (error) {
       console.error(
         "Error al cargar las sesiones y auditoría desde Supabase:",
         error,
       );
     }
-  };
+  }
 
   const handleSyncSessionToCRM = async (sessionId: string) => {
-    const fakeCrmId = `CRM-${Math.floor(Math.random() * 10000) + 10000}`;
     try {
-      await supabase
-        .from("sessions")
-        .update({ crm_prospect_id: fakeCrmId })
-        .eq("session_id", sessionId);
-      await supabase.from("audit_logs").insert([
-        {
-          session_id: sessionId,
-          usuario: "Sistema",
-          accion: "Sincronización inicial con CRM",
-          resultado: "ID Asignado",
-        },
-      ]);
-      fetchSessions();
+      const crmProspectId = await syncLeadToCrm(sessionId);
+      await fetchSessions();
+      return crmProspectId;
     } catch (error) {
       console.error(error);
-    }
-  };
-
-  const handlePromoteToOnboarding = async (sessionId: string) => {
-    const sessionActual = sessions.find((s) => s.sessionId === sessionId);
-    if (!sessionActual) return;
-    const newExp = new Date(new Date().getTime() + 3 * 24 * 60 * 60 * 1000);
-    try {
-      await supabase
-        .from("sessions")
-        .update({
-          workflow: "onboarding",
-          status: "active",
-          expires_at: newExp.toISOString(),
-          reactivaciones_count: sessionActual.reactivacionesCount + 1,
-        })
-        .eq("session_id", sessionId);
-      await supabase.from("audit_logs").insert([
-        {
-          session_id: sessionId,
-          usuario: "SAC",
-          accion: "Promoción a ONBOARDING",
-          resultado: "Exitoso",
-        },
-      ]);
-      fetchSessions();
-    } catch (error) {
-      console.error(error);
+      throw error;
     }
   };
 
   const handleApproveSession = async (sessionId: string) => {
     try {
-      await supabase
-        .from("sessions")
-        .update({ status: "approved" })
-        .eq("session_id", sessionId);
-      await supabase.from("audit_logs").insert([
-        {
-          session_id: sessionId,
-          usuario: "SAC (Revisor)",
-          accion: "Aprobación y Enriquecimiento CRM",
-          resultado: "Enviado",
-        },
-      ]);
+      await updateSession(sessionId, { status: "approved" });
+      await appendSessionAudit(
+        sessionId,
+        "SAC (Revisor)",
+        "Aprobación de expediente",
+        "Aprobado; integración CRM pendiente",
+      );
       fetchSessions();
     } catch (error) {
       console.error(error);
@@ -173,18 +86,16 @@ function SacDashboard() {
   const handleReactivateSession = async (sessionId: string) => {
     const newExp = new Date(new Date().getTime() + 3 * 24 * 60 * 60 * 1000);
     try {
-      await supabase
-        .from("sessions")
-        .update({ status: "active", expires_at: newExp.toISOString() })
-        .eq("session_id", sessionId);
-      await supabase.from("audit_logs").insert([
-        {
-          session_id: sessionId,
-          usuario: "SAC",
-          accion: "Reactivación / Extensión de Link",
-          resultado: "+3 Días",
-        },
-      ]);
+      await updateSession(sessionId, {
+        status: "active",
+        expires_at: newExp.toISOString(),
+      });
+      await appendSessionAudit(
+        sessionId,
+        "SAC",
+        "Reactivación / Extensión de Link",
+        "+3 Días",
+      );
       fetchSessions();
     } catch (error) {
       console.error(error);
@@ -201,12 +112,11 @@ function SacDashboard() {
       </nav>
       <SacWorkspace
         sessions={sessions}
-        onSessionCreated={() => fetchSessions()}
-        onPromoteToOnboarding={handlePromoteToOnboarding}
         onSyncSessionToCRM={handleSyncSessionToCRM}
         onApproveSession={handleApproveSession}
         onReactivateSession={handleReactivateSession}
         onRefresh={fetchSessions} // Vinculamos el botón de actualización manual
+        onSignOut={() => supabase.auth.signOut()}
       />
     </div>
   );
@@ -216,11 +126,30 @@ function SacDashboard() {
 // 2. ENRUTADOR PRINCIPAL (Solo 2 Rutas)
 // ------------------------------------------------------------------
 export default function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthReady(true);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthReady(true);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  if (!authReady) return <div className="min-h-screen bg-slate-950" />;
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<SacDashboard />} />
-        <Route path="/sac/nueva-sesion" element={<CreateSessionPage />} />
+        <Route path="/solicitud" element={<PublicLeadForm />} />
+        <Route path="/sac/login" element={<SacLoginPage session={session} />} />
+        <Route path="/" element={session ? <SacDashboard /> : <Navigate to="/sac/login" replace />} />
+        <Route path="/sac/nueva-sesion" element={session ? <CreateSessionPage /> : <Navigate to="/sac/login" replace />} />
         <Route path="/registro/magic-link" element={<OnboardingPortal />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

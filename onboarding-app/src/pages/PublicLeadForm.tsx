@@ -4,14 +4,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Send, CheckCircle2, Building2 } from "lucide-react"
-import type { PublicLead } from "@/types/onboarding"
+import { createPublicLead } from "@/repositories/leadRepository"
 
-interface PublicLeadFormProps {
-  onLeadCreated: (lead: PublicLead) => void
-}
-
-export function PublicLeadForm({ onLeadCreated }: PublicLeadFormProps) {
+export function PublicLeadForm() {
   const [submitted, setSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
+  const [reference, setReference] = useState("")
   const [formData, setFormData] = useState({
     razonSocial: "",
     rfc: "",
@@ -21,15 +20,27 @@ export function PublicLeadForm({ onLeadCreated }: PublicLeadFormProps) {
     interesComercial: "Productos Químicos Industriales",
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const newLead: PublicLead = {
-      id: `LEAD-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-      ...formData,
-      fechaRegistro: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX"),
+    setIsSubmitting(true)
+    setErrorMessage("")
+    try {
+      const created = await createPublicLead({
+        legalName: formData.razonSocial,
+        taxId: formData.rfc,
+        contactName: formData.nombreContacto,
+        contactEmail: formData.correoContacto,
+        contactPhone: formData.telefonoContacto,
+        commercialInterest: formData.interesComercial,
+      })
+      setReference(created.leadId.slice(0, 8).toUpperCase())
+      setSubmitted(true)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No fue posible registrar la solicitud."
+      setErrorMessage(message.replace(/^.*?: /, ""))
+    } finally {
+      setIsSubmitting(false)
     }
-    onLeadCreated(newLead)
-    setSubmitted(true)
   }
 
   if (submitted) {
@@ -43,6 +54,7 @@ export function PublicLeadForm({ onLeadCreated }: PublicLeadFormProps) {
           <CardDescription className="text-xs">
             Hemos recibido tus datos de contacto. Un ejecutivo comercial se pondrá en contacto contigo a la brevedad para evaluar tus necesidades.
           </CardDescription>
+          <p className="text-xs font-mono text-slate-500">Referencia: {reference}</p>
           <Button variant="outline" size="sm" onClick={() => setSubmitted(false)} className="text-xs">
             Registrar otra empresa
           </Button>
@@ -142,9 +154,12 @@ export function PublicLeadForm({ onLeadCreated }: PublicLeadFormProps) {
             </CardContent>
 
             <CardFooter className="pt-2">
-              <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white gap-2 text-xs">
-                Enviar Solicitud <Send className="h-3.5 w-3.5" />
+              <div className="w-full space-y-2">
+                {errorMessage && <p className="text-xs text-red-600" role="alert">{errorMessage}</p>}
+              <Button disabled={isSubmitting} type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white gap-2 text-xs">
+                {isSubmitting ? "Registrando..." : "Enviar Solicitud"} <Send className="h-3.5 w-3.5" />
               </Button>
+              </div>
             </CardFooter>
           </form>
         </Card>

@@ -45,7 +45,7 @@ import { supabase } from "@/lib/supabase";
 
 interface SacWorkspaceProps {
   sessions: MagicLinkSession[];
-  onSyncSessionToCRM: (sessionId: string) => void;
+  onSyncSessionToCRM: (sessionId: string) => Promise<string>;
   onApproveSession: (sessionId: string) => void;
   onReactivateSession: (sessionId: string) => void;
   onRequestCorrections?: (
@@ -54,6 +54,7 @@ interface SacWorkspaceProps {
     message: string,
   ) => void;
   onRefresh?: () => void;
+  onSignOut: () => void;
 }
 
 type AlertActionType =
@@ -71,6 +72,7 @@ export function SacWorkspace({
   onReactivateSession,
   onRequestCorrections = () => console.log("Correcciones solicitadas"),
   onRefresh,
+  onSignOut,
 }: SacWorkspaceProps) {
   const navigate = useNavigate();
 
@@ -223,11 +225,22 @@ export function SacWorkspace({
 
     switch (activeAlert.type) {
       case "sync":
-        onSyncSessionToCRM(activeAlert.sessionId);
-        setSuccessMessage({
-          title: "Sincronización Iniciada",
-          desc: "Se está generando el ID en SAP/CRM.",
-        });
+        try {
+          const crmProspectId = await onSyncSessionToCRM(activeAlert.sessionId);
+          setSuccessMessage({
+            title: "Prospecto simulado confirmado",
+            desc: "CRM local devolvió " + crmProspectId + ". Ya puede promoverse a onboarding.",
+          });
+        } catch (error) {
+          const errorDescription =
+            typeof error === "object" && error !== null && "message" in error
+              ? String(error.message)
+              : "Revisa el estado y los datos mínimos del Lead.";
+          setSuccessMessage({
+            title: "No fue posible sincronizar",
+            desc: errorDescription,
+          });
+        }
         setTimeout(() => setSuccessMessage(null), 3500);
         break;
 
@@ -397,6 +410,13 @@ export function SacWorkspace({
             className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 text-xs h-9"
           >
             <Link2 className="h-4 w-4" /> Crear Nueva Sesión
+          </Button>
+          <Button
+            variant="outline"
+            onClick={onSignOut}
+            className="bg-slate-800 border-slate-700 text-slate-300 h-9 text-xs"
+          >
+            Cerrar sesión
           </Button>
           <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 h-9 rounded-md border border-slate-700">
             <User className="h-3.5 w-3.5 text-indigo-400" />

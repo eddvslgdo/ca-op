@@ -2,7 +2,19 @@
 // 1. ESTADO, WORKFLOW Y AUDITORÍA DE SESIÓN (RN-077 a RN-089)
 // ==========================================
 export type SessionWorkflow = "lead" | "onboarding" // RN-081
-export type SessionStatus = "active" | "expired" | "submitted" | "approved" | "corrections_requested" | "completed_by_client"
+export type SessionStatus =
+  | "active"
+  | "expired"
+  | "submitted"
+  | "completed_by_client"
+  | "under_review"
+  | "corrections_requested"
+  | "approved"
+  | "integration_pending"
+  | "integration_failed"
+  | "integrated"
+  | "closed"
+  | "cancelled"
 
 export interface AuditLogEntry {
   id: string
